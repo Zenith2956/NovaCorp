@@ -1,4 +1,4 @@
-// Edge Function « envoyer-mails » – NovaCorp (version 3 : demandes + tâches + délais)
+// Edge Function « envoyer-mails » – NovaCorp (version 4 : demandes + tâches + délais + workflow)
 // Envoie les mails en attente de la table public.mails_sortants via l'API Resend.
 // Appelée chaque minute par pg_cron ; peut aussi être appelée à la main : select automation.appeler_envoyer_mails();
 //
@@ -129,36 +129,73 @@ async function envoyer(mail: MailSortant, c: Contenu) {
 // =====================================================================
 async function mailDemande(mail: MailSortant): Promise<Contenu> {
   const [d] = await sql`
-    select d.id, d.type, d.objet, d.message, d.statut, d.jeton_decision, d.created_at, d.envoyee_at,
-           d.urgente, d.date_souhaitee, d.echeance_le, d.deadline,
+    select d.id, d.type, d.objet, d.message, d.statut, d.etape, d.jeton_decision, d.created_at, d.envoyee_at,
+           d.urgente, d.date_souhaitee, d.echeance_le, d.deadline, d.commentaire_decision,
+           d.montant, d.date_debut, d.date_fin, d.nb_jours_ouvres,
            e.prenom as e_prenom, e.nom as e_nom, e.email as e_email, e.telephone as e_tel,
-           m.prenom as m_prenom, m.nom as m_nom, m.email as m_email, m.telephone as m_tel
+           m.prenom as m_prenom, m.nom as m_nom, m.email as m_email, m.telephone as m_tel,
+           dp.prenom as dp_prenom, dp.nom as dp_nom,
+           tp.prenom as tp_prenom, tp.nom as tp_nom,
+           ec.libelle as etape_libelle, coalesce(ec.valideur, 'manager') as valideur,
+           rv.libelle as valideur_service,
+           td.role_traitement, rt.libelle as service_traitement,
+           (select count(*) from public.etapes_circuit x where x.type_code = d.type) as nb_etapes
       from public.demandes d
       join public.users e on e.id = d.demandeur_id
       left join public.users m on m.id = d.manager_id
+      left join public.users dp on dp.id = d.decision_par
+      left join public.users tp on tp.id = d.traite_par
+      left join public.etapes_circuit ec on ec.type_code = d.type and ec.ordre = d.etape
+      left join public.roles rv on rv.slug = ec.valideur
+      left join public.types_demande td on td.code = d.type
+      left join public.roles rt on rt.slug = td.role_traitement
      where d.id = ${mail.demande_id}`
   if (!d) throw new Error(`demande ${mail.demande_id} introuvable`)
 
-  // Relance / rappel / escalade devenus inutiles : la demande a été traitée entre-temps
-  if (['relance', 'rappel_echeance', 'escalade'].includes(mail.type) && d.statut !== 'en_attente') {
-    throw new Annule('demande déjà traitée')
+  const don = mail.donnees ?? {}
+  const etapeDuMail = don.etape !== undefined && don.etape !== null ? Number(don.etape) : null
+
+  // Mails devenus inutiles entre leur création et leur envoi
+  const pourLeValideur = ['relance', 'rappel_echeance', 'escalade', 'etape_suivante', 'complement_recu']
+  if (pourLeValideur.includes(mail.type)) {
+    if (d.statut !== 'en_attente') throw new Annule('demande déjà traitée')
+    if (etapeDuMail !== null && etapeDuMail !== Number(d.etape)) throw new Annule("la demande a changé d'étape")
   }
+  if (mail.type === 'a_completer' && d.statut !== 'a_completer') throw new Annule('demande déjà complétée ou close')
+  if (mail.type === 'a_traiter' && d.statut !== 'validee') throw new Annule('demande déjà prise en charge ou corrigée')
 
   const typeLib = TYPES_DEMANDE[d.type] ?? d.type
   const employe = `${esc(d.e_prenom)} ${esc(d.e_nom)}`
   const manager = `${esc(d.m_prenom ?? '')} ${esc(d.m_nom ?? '')}`
+  const decideur = d.dp_prenom ? `${esc(d.dp_prenom)} ${esc(d.dp_nom)}` : manager
+  const parService = d.valideur !== 'manager'
+  const service = esc(d.valideur_service ?? d.etape_libelle ?? '')
+  const bonjourValideur = parService ? `<p>Bonjour,</p>` : `<p>Bonjour ${esc(d.m_prenom ?? '')},</p>`
+  const etapeTexte = Number(d.nb_etapes) > 1 && d.etape_libelle
+    ? `<p style="font-size:14px"><strong>Étape ${d.etape} du circuit :</strong> ${esc(d.etape_libelle)}${Number(d.etape) > 1 ? ' (déjà validée par le manager)' : ''}</p>`
+    : ''
   const urgent = d.urgente ? 'URGENT – ' : ''
   const lien = (choix: string) => `${APP_URL}/decision/${d.id}/${d.jeton_decision}?choix=${choix}`
   const boutons = d.jeton_decision
-    ? `<p style="margin:24px 0">${bouton(lien('validee'), 'Valider', '#2b8a3e')}&nbsp;&nbsp;${bouton(lien('refusee'), 'Refuser', '#c92a2a')}</p>
-       <p style="color:#667085;font-size:13px">Vous pouvez aussi répondre directement à ce mail.</p>`
+    ? `<p style="margin:24px 0">${bouton(lien('validee'), 'Valider', '#2b8a3e')}&nbsp;&nbsp;${bouton(lien('a_completer'), 'Demander un complément', '#e67700')}&nbsp;&nbsp;${bouton(lien('refusee'), 'Refuser', '#c92a2a')}</p>
+       <p style="color:#667085;font-size:13px">${parService
+         ? `Ce mail est envoyé à tout le service ${service} : la première décision clôt l'étape. Connexion à NovaCorp demandée pour savoir qui décide.`
+         : 'Vous pouvez aussi répondre directement à ce mail.'} Un commentaire est obligatoire pour refuser ou demander un complément.</p>`
     : ''
   const delais = `<p style="font-size:14px"><strong>Réponse attendue avant le :</strong> ${dateFr(d.echeance_le)}
        ${d.date_souhaitee ? `· <strong>date souhaitée :</strong> ${dateFr(d.date_souhaitee)}` : ''}
        · sans réponse, la demande expire après le ${dateFr(d.deadline)}.</p>`
+  const details = [
+    d.montant !== null ? `<strong>Montant :</strong> ${euros(d.montant)}` : '',
+    d.date_debut ? `<strong>Congé :</strong> du ${dateFr(d.date_debut)} au ${dateFr(d.date_fin)} (${d.nb_jours_ouvres} jour(s) ouvré(s))` : '',
+  ].filter(Boolean).join('<br>')
   const resume = `
-    <p><strong>Objet :</strong> ${esc(d.objet)}<br><strong>Type :</strong> ${typeLib}</p>
+    <p><strong>Objet :</strong> ${esc(d.objet)}<br><strong>Type :</strong> ${typeLib}${details ? '<br>' + details : ''}</p>
     <div style="padding:12px;background:#f4f6fb;border-left:4px solid #3b5bdb;white-space:pre-line">${esc(d.message)}</div>`
+  const commentaire = (titre: string, texte: unknown, couleur = '#c92a2a') => texte
+    ? `<p><strong>${titre} :</strong></p><div style="padding:12px;background:#fff8f0;border-left:4px solid ${couleur};white-space:pre-line">${esc(String(texte))}</div>`
+    : ''
+  const lienFiche = (texte: string) => `<p>${lienTexte(`${APP_URL}/demandes/${d.id}`, texte)}</p>`
   const pied = `<p style="color:#667085;font-size:12px;margin-top:24px">Demande #${d.id} – NovaCorp · ${employe} · ${esc(d.e_email)}${d.e_tel ? ' · ' + esc(d.e_tel) : ''}</p>`
   const envoyeeLe = dateFr(d.envoyee_at ?? d.created_at)
 
@@ -172,50 +209,111 @@ async function mailDemande(mail: MailSortant): Promise<Contenu> {
         attachments,
         html: page(`<p>Bonjour ${esc(d.m_prenom ?? '')},</p>
           <p><strong>${employe}</strong> vous adresse une demande${d.urgente ? ' <strong style="color:#c2255c">urgente</strong>' : ''}.</p>
-          ${resume}${delais}${pjs.length ? `<p>${pjs.length} pièce(s) jointe(s).</p>` : ''}${liens}${boutons}${pied}`),
+          ${resume}${etapeTexte}${delais}${pjs.length ? `<p>${pjs.length} pièce(s) jointe(s).</p>` : ''}${liens}${boutons}${pied}`),
+      }
+    }
+    case 'etape_suivante': {
+      const pjs = await sql`select nom_original, chemin, taille from public.pieces_jointes where demande_id = ${d.id} order by id`
+      const { attachments, liens } = await piecesJointes(pjs)
+      return {
+        sujet: `[NovaCorp] ${urgent}À valider (${d.etape_libelle ?? 'étape ' + d.etape}) – demande #${d.id} : ${d.objet}`,
+        replyTo: d.e_email,
+        attachments,
+        html: page(`${bonjourValideur}
+          <p>La demande de <strong>${employe}</strong> a été validée par son manager, ${manager}.
+          Elle attend maintenant la validation ${parService ? `du service <strong>${service}</strong>` : 'de votre part'}.</p>
+          ${resume}${etapeTexte}${delais}${pjs.length ? `<p>${pjs.length} pièce(s) jointe(s).</p>` : ''}${liens}${boutons}${pied}`),
       }
     }
     case 'decision': {
-      const ok = d.statut === 'validee'
+      const ok = d.statut === 'validee' || d.statut === 'en_traitement' || d.statut === 'terminee'
+      if (d.statut === 'en_attente') throw new Annule('décision corrigée (demande remise en attente)')
       return {
         sujet: `[NovaCorp] Votre demande #${d.id} a été ${ok ? 'validée' : 'refusée'}`,
         html: page(`<p>Bonjour ${esc(d.e_prenom)},</p>
           <p>Votre demande <strong>« ${esc(d.objet)} »</strong> a été
-          <strong style="color:${ok ? '#2b8a3e' : '#c92a2a'}">${ok ? 'validée' : 'refusée'}</strong> par ${manager}.</p>
-          <p>${lienTexte(`${APP_URL}/demandes/${d.id}`, 'Voir la demande dans NovaCorp')}</p>${pied}`),
+          <strong style="color:${ok ? '#2b8a3e' : '#c92a2a'}">${ok ? 'validée' : 'refusée'}</strong> par ${decideur}.</p>
+          ${ok ? '' : commentaire('Motif du refus', don.commentaire ?? d.commentaire_decision)}
+          ${ok && d.service_traitement ? `<p>Elle est transmise au service <strong>${esc(d.service_traitement)}</strong> pour traitement ; vous serez prévenu quand ce sera fait.</p>` : ''}
+          ${lienFiche('Voir la demande dans NovaCorp')}${pied}`),
       }
     }
+    case 'a_traiter':
+      return {
+        sujet: `[NovaCorp] À traiter – demande #${d.id} validée : ${typeLib}, ${d.objet}`,
+        replyTo: d.e_email,
+        html: page(`<p>Bonjour,</p>
+          <p>La demande de <strong>${employe}</strong> a été validée par ${decideur}.
+          Elle est à traiter par le service <strong>${esc(d.service_traitement ?? '')}</strong>.</p>
+          ${resume}
+          <p style="margin:24px 0">${bouton(`${APP_URL}/demandes/${d.id}`, 'Prendre en charge dans NovaCorp', '#3b5bdb')}</p>
+          <p style="color:#667085;font-size:13px">Ce mail est envoyé à tout le service : la première personne qui prend la demande en charge s'en occupe.</p>${pied}`),
+      }
+    case 'a_completer':
+      return {
+        sujet: `[NovaCorp] Votre demande #${d.id} est à compléter : ${d.objet}`,
+        html: page(`<p>Bonjour ${esc(d.e_prenom)},</p>
+          <p>${decideurAction(d)} demande un complément avant de pouvoir se prononcer sur votre demande <strong>« ${esc(d.objet)} »</strong>.</p>
+          ${commentaire('Ce qui est demandé', don.commentaire ?? d.commentaire_decision, '#e67700')}
+          <p style="margin:24px 0">${bouton(`${APP_URL}/demandes/${d.id}`, 'Compléter la demande', '#e67700')}</p>
+          <p style="color:#667085;font-size:13px">Sans complément avant le ${dateFr(d.deadline)}, la demande expire.</p>${pied}`),
+      }
+    case 'complement_recu':
+      return {
+        sujet: `[NovaCorp] ${urgent}Complément reçu – demande #${d.id} : ${d.objet}`,
+        replyTo: d.e_email,
+        html: page(`${bonjourValideur}
+          <p><strong>${employe}</strong> a complété sa demande comme demandé. Elle attend de nouveau votre décision.</p>
+          ${resume}${etapeTexte}${delais}${boutons}${pied}`),
+      }
+    case 'annulation':
+      return {
+        sujet: `[NovaCorp] Demande #${d.id} annulée par ${d.e_prenom} ${d.e_nom} : ${d.objet}`,
+        html: page(`${bonjourValideur}
+          <p><strong>${employe}</strong> a annulé sa demande <strong>« ${esc(d.objet)} »</strong> (${typeLib}).
+          Vous n'avez plus rien à faire : les liens des mails précédents ne fonctionnent plus.</p>${pied}`),
+      }
+    case 'traitement_termine':
+      return {
+        sujet: `[NovaCorp] Votre demande #${d.id} a été traitée : ${d.objet}`,
+        html: page(`<p>Bonjour ${esc(d.e_prenom)},</p>
+          <p>Votre demande <strong>« ${esc(d.objet)} »</strong> (${typeLib}) a été traitée par
+          ${d.tp_prenom ? `<strong>${esc(d.tp_prenom)} ${esc(d.tp_nom)}</strong>` : 'le service'}${d.service_traitement ? ` (${esc(d.service_traitement)})` : ''}.
+          Le dossier est clos.</p>${lienFiche('Voir la demande dans NovaCorp')}${pied}`),
+      }
     case 'relance':
       return {
         sujet: `[NovaCorp] ${urgent}Relance – demande #${d.id} en attente : ${d.objet}`,
         replyTo: d.e_email,
-        html: page(`<p>Bonjour ${esc(d.m_prenom ?? '')},</p>
-          <p>La demande de <strong>${employe}</strong> envoyée le ${envoyeeLe} attend toujours votre réponse.</p>
-          ${resume}${delais}${boutons}${pied}`),
+        html: page(`${bonjourValideur}
+          <p>La demande de <strong>${employe}</strong> envoyée le ${envoyeeLe} attend toujours ${parService ? `la décision du service <strong>${service}</strong>` : 'votre réponse'}.</p>
+          ${resume}${etapeTexte}${delais}${boutons}${pied}`),
       }
     case 'rappel_echeance':
       return {
         sujet: `[NovaCorp] ${urgent}Échéance demain – demande #${d.id} : ${d.objet}`,
         replyTo: d.e_email,
-        html: page(`<p>Bonjour ${esc(d.m_prenom ?? '')},</p>
+        html: page(`${bonjourValideur}
           <p>La demande de <strong>${employe}</strong> arrive à échéance le <strong>${dateFr(d.echeance_le)}</strong>.
-          Sans réponse, elle sera transmise aux RH et à votre responsable.</p>${resume}${boutons}${pied}`),
+          Sans réponse, elle sera transmise ${parService ? 'à la direction' : 'aux RH et à votre responsable'}.</p>${resume}${etapeTexte}${boutons}${pied}`),
       }
     case 'escalade':
       return {
         sujet: `[NovaCorp] Escalade – demande #${d.id} sans réponse (échéance du ${dateFr(d.echeance_le)} dépassée)`,
         html: page(`<p>Bonjour,</p>
-          <p>La demande de <strong>${employe}</strong> adressée à <strong>${manager}</strong>${d.m_tel ? ' (' + esc(d.m_tel) + ')' : ''}
-          le ${envoyeeLe} n'a pas reçu de réponse malgré une relance. L'échéance était le ${dateFr(d.echeance_le)} ;
+          <p>La demande de <strong>${employe}</strong> attend depuis le ${envoyeeLe}
+          ${parService ? `la validation du service <strong>${service}</strong> (étape ${d.etape})`
+            : `la réponse de <strong>${manager}</strong>${d.m_tel ? ' (' + esc(d.m_tel) + ')' : ''}`},
+          malgré une relance. L'échéance était le ${dateFr(d.echeance_le)} ;
           la demande expirera après le ${dateFr(d.deadline)}.</p>${resume}
-          <p>${lienTexte(`${APP_URL}/demandes/${d.id}`, 'Traiter la demande dans NovaCorp')}</p>${pied}`),
+          ${lienFiche('Voir la demande dans NovaCorp')}${pied}`),
       }
     case 'expiration':
       return {
         sujet: `[NovaCorp] Votre demande #${d.id} a expiré : ${d.objet}`,
         html: page(`<p>Bonjour ${esc(d.e_prenom)},</p>
-          <p>Votre demande <strong>« ${esc(d.objet)} »</strong>, adressée à ${manager} le ${envoyeeLe},
-          n'a pas reçu de réponse avant le ${dateFr(d.deadline)} : elle a <strong>expiré</strong>.</p>
+          <p>Votre demande <strong>« ${esc(d.objet)} »</strong>, envoyée le ${envoyeeLe},
+          n'a pas ${d.etape > 1 ? `été validée à l'étape « ${esc(d.etape_libelle ?? '')} »` : `reçu de réponse de ${manager}`} avant le ${dateFr(d.deadline)} : elle a <strong>expiré</strong>.</p>
           <p>${bouton(`${APP_URL}/demandes/nouvelle?refaire=${d.id}`, 'Refaire la demande', '#3b5bdb')}</p>
           <p style="color:#667085;font-size:13px">Les RH et votre manager sont en copie de ce message.</p>${pied}`),
       }
@@ -224,12 +322,19 @@ async function mailDemande(mail: MailSortant): Promise<Contenu> {
   }
 }
 
+/** Qui a demandé le complément : le service de l'étape, ou le manager. */
+function decideurAction(d: Record<string, any>): string {
+  return d.valideur !== 'manager'
+    ? `Le service <strong>${esc(d.valideur_service ?? d.etape_libelle ?? '')}</strong>`
+    : `<strong>${esc(d.m_prenom ?? '')} ${esc(d.m_nom ?? '')}</strong>`
+}
+
 // =====================================================================
 // Tâches
 // =====================================================================
 async function mailTache(mail: MailSortant): Promise<Contenu> {
   const [t] = await sql`
-    select t.id, t.titre, t.description, t.statut, t.deadline, t.deadline_initiale, t.nb_reports, t.jeton_deadline,
+    select t.id, t.titre, t.description, t.statut, t.commentaire_validation, t.deadline, t.deadline_initiale, t.nb_reports, t.jeton_deadline,
            t.projet_id, t.created_at, p.nom as projet,
            automation.ajouter_jours_ouvres(automation.date_paris(t.created_at), 5) as minimum,
            r.prenom as r_prenom, r.nom as r_nom, r.email as r_email,
@@ -255,6 +360,7 @@ async function mailTache(mail: MailSortant): Promise<Contenu> {
   if (mail.type === 'tache_expiration' && t.statut !== 'expiree') {
     throw new Annule('tâche réactivée (deadline repoussée)')
   }
+  if (mail.type === 'tache_a_valider' && t.statut !== 'a_valider') throw new Annule('tâche déjà validée ou renvoyée')
 
   const responsable = `${esc(t.r_prenom)} ${esc(t.r_nom)}`
   const chef = `${esc(t.c_prenom ?? '')} ${esc(t.c_nom ?? '')}`
@@ -329,6 +435,30 @@ async function mailTache(mail: MailSortant): Promise<Contenu> {
             : 'Vous pouvez repousser la deadline dans NovaCorp (votre manager en sera informé).'}</p>
           ${resume}<p>${lienTache}</p>${pied}`),
       }
+    case 'tache_a_valider':
+      return {
+        sujet: `[NovaCorp] Tâche à valider – ${t.titre} (${t.projet})`,
+        html: page(`<p>Bonjour ${esc(t.c_prenom ?? '')},</p>
+          <p><strong>${responsable}</strong> a terminé sa tâche${t.deadline ? ` (deadline du ${dateFr(t.deadline)})` : ''}.
+          En tant que chef de projet, validez-la ou renvoyez-la avec un commentaire.</p>
+          ${resume}<p style="margin:24px 0">${bouton(`${APP_URL}/taches/${t.id}`, 'Valider ou renvoyer dans NovaCorp', '#6741d9')}</p>${pied}`),
+      }
+    case 'tache_renvoyee':
+      return {
+        sujet: `[NovaCorp] Tâche renvoyée par le chef de projet – ${t.titre}`,
+        html: page(`<p>Bonjour ${esc(t.r_prenom)},</p>
+          <p>${chef} n'a pas validé votre tâche : elle repasse <strong>en cours</strong>.</p>
+          <p><strong>Ce qu'il reste à faire :</strong></p>
+          <div style="padding:12px;background:#fff8f0;border-left:4px solid #e67700;white-space:pre-line">${esc(String(don.commentaire ?? t.commentaire_validation ?? ''))}</div>
+          ${resume}<p>${lienTache}</p>${pied}`),
+      }
+    case 'tache_validee':
+      return {
+        sujet: `[NovaCorp] Tâche validée – ${t.titre}`,
+        html: page(`<p>Bonjour ${esc(t.r_prenom)},</p>
+          <p>${chef} a validé votre tâche <strong>« ${esc(t.titre)} »</strong> (projet ${esc(t.projet ?? '')}) : elle est <strong style="color:#2b8a3e">terminée</strong>. Merci !</p>
+          <p>${lienTache}</p>${pied}`),
+      }
     default:
       throw new Error(`type de mail inconnu : ${mail.type}`)
   }
@@ -380,6 +510,9 @@ function isoDate(d: Date | string | null): string {
   if (!d) return ''
   if (d instanceof Date) return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
   return String(d).slice(0, 10)
+}
+function euros(n: unknown): string {
+  return Number(n).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })
 }
 function esc(s: string) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))

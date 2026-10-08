@@ -184,6 +184,18 @@ Chaque création, changement de statut ou d'étape est enregistré par trigger (
 | --- | --- | --- |
 | 1 | Base : `etapes_circuit`, `transitions` (vérifiées par trigger), `historique` (trigger), nouveaux champs (montant, dates de congé, étape, motif), assignation automatique du manager, valideurs par étape, mails déclenchés par les nouvelles transitions, relances / escalades par étape | Écrit (migration `2026_10_08_000004_workflow`, SQL `database/sql/2026_10_08_000004_workflow.sql`) — à appliquer puis tester |
 | 2 | Laravel : formulaire (montant, dates), valider / refuser motivé / à compléter / annuler / traiter, étape affichée, historique sur la fiche, validation des tâches par le chef | Écrit : service `app/Services/WorkflowDemande.php` (toutes les actions, appli et lien du mail), route `POST /demandes/{id}/action`, formulaire par type (montant / dates de congé, circuit affiché, manager assigné automatiquement), fiche avec circuit + boutons selon le rôle + historique, filtre « À traiter par moi », lien du mail : valider / refuser / compléter avec commentaire (connexion obligatoire pour une étape de service), tâches de projet « À valider » par le chef (valider / renvoyer avec commentaire), `WorkflowTest` (9 tests). Correctifs SQL `2026_10_08_000005` |
-| 3 | Edge Function : nouveaux modèles de mails | À faire |
+| 3 | Edge Function : nouveaux modèles de mails | Fait : Edge Function `envoyer-mails` **v4** déployée — 9 nouveaux mails (étape suivante, à traiter, à compléter, complément reçu, annulation, traitement terminé, tâche à valider / renvoyée / validée), boutons Valider / Demander un complément / Refuser, mails adaptés aux étapes de service (« Bonjour, » + service, escalade vers la direction), motif du refus, montant et dates de congé dans les mails, annulation automatique des mails devenus inutiles (changement d'étape, demande déjà prise en charge…). Démo sur Supabase : 16 mails envoyés, 1 annulé à juste titre, 0 échec (données `[DÉMO WF]`, nettoyage : `supabase/sql/nettoyer-demo-workflow.sql`) |
 | 4 | Statistiques pour Flutter : RPC sécurisée + table de statistiques en Realtime + lien des comptes par e-mail | À faire |
 | 5 | Tests (SQL + Laravel) et démonstration | À faire |
+
+
+## Étape 3 – Démonstration des mails (08/10/2026, mode test : tout arrive dans la boîte de test)
+
+| Scénario | Mails envoyés |
+| --- | --- |
+| Note de frais #30 (85,40 €) : manager → comptabilité → traitement | nouvelle demande · étape suivante (13 comptables) · décision « validée » · à traiter (comptabilité) · traitement terminé |
+| Matériel #31 : complément demandé, complété, puis annulé par l'employé | nouvelle demande · à compléter (avec la demande du manager) · complément reçu · annulation |
+| Congé #32 du 21/12 au 01/01 (8 jours ouvrés, Noël et 1er janvier exclus) : manager → RH → refus | nouvelle demande · étape suivante (RH) · décision « refusée » avec motif |
+| Tâche #25 (projet 1) : à valider → renvoyée → à valider → validée aussitôt | tâche assignée · tâche à valider · tâche renvoyée (commentaire) · **tâche à valider annulée** (déjà validée) · tâche validée |
+
+Historique de la demande #30 vérifié : création (employé, appli) → étape 2 (manager, appli) → validée (comptable, mail) → en traitement → terminée.

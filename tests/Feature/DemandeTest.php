@@ -65,8 +65,9 @@ class DemandeTest extends TestCase
         $this->actingAs($employe)->post('/demandes', [
             'type' => 'conge',
             'objet' => 'Congés été',
-            'message' => 'Du 1er au 15 août.',
-            'manager_id' => $manager->id,
+            'message' => 'Trois jours en décembre.',
+            'date_debut' => '2026-12-01',
+            'date_fin' => '2026-12-03', // 3 jours ouvrés : pas d'étape RH
             'pieces_jointes' => [
                 UploadedFile::fake()->create('justificatif.pdf', 100, 'application/pdf'),
                 UploadedFile::fake()->create('photo.jpg', 200, 'image/jpeg'), // sans l'extension GD
@@ -78,9 +79,10 @@ class DemandeTest extends TestCase
         Mail::assertSent(DemandeEnvoyee::class, fn ($mail) => $mail->hasTo($manager->email)
             && count($mail->attachments()) === 2);
 
-        // Validation manuelle par le manager
+        // Manager assigné automatiquement, validation dans l'application
         $demandeId = \App\Models\Demande::first()->id;
-        $this->actingAs($manager)->patch("/demandes/{$demandeId}/statut", ['statut' => 'validee'])->assertRedirect();
+        $this->assertDatabaseHas('demandes', ['id' => $demandeId, 'manager_id' => $manager->id, 'nb_jours_ouvres' => 3]);
+        $this->actingAs($manager)->post("/demandes/{$demandeId}/action", ['action' => 'valider'])->assertRedirect();
         $this->assertDatabaseHas('demandes', ['id' => $demandeId, 'statut' => 'validee']);
 
         // Un autre employé ne peut pas voir la demande
@@ -100,17 +102,21 @@ class DemandeTest extends TestCase
         $this->assertNotNull($jeton);
 
         // Le GET n'enregistre rien
-        $this->get("/decision/{$demande->id}/{$jeton}?choix=validee")->assertOk()->assertSee('Valider la demande');
+        $this->get("/decision/{$demande->id}/{$jeton}?choix=validee")->assertOk()->assertSee('Demander un complément');
         $this->assertSame('en_attente', $demande->fresh()->statut);
 
         // Mauvais jeton refusé
         $this->post("/decision/{$demande->id}/mauvais-jeton", ['choix' => 'validee'])->assertSee('Lien expiré');
 
         // Bon jeton : décision enregistrée, jeton consommé
-        $this->post("/decision/{$demande->id}/{$jeton}", ['choix' => 'refusee'])->assertSee('Décision enregistrée');
+        // Refus sans motif : impossible
+        $this->post("/decision/{$demande->id}/{$jeton}", ['choix' => 'refusee'])->assertSessionHasErrors('commentaire');
+        $this->post("/decision/{$demande->id}/{$jeton}", ['choix' => 'refusee', 'commentaire' => 'Période chargée'])->assertSee('Décision enregistrée');
         $demande->refresh();
         $this->assertSame('refusee', $demande->statut);
         $this->assertSame($manager->id, $demande->decision_par);
+        $this->assertSame('Période chargée', $demande->commentaire_decision);
+        $this->assertSame('mail', $demande->historique->last()->canal);
         $this->assertNull($demande->jeton_decision);
 
         // Lien réutilisé : refusé

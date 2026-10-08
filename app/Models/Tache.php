@@ -22,6 +22,7 @@ class Tache extends Model
     public const STATUTS = [
         'a_faire' => 'À faire',
         'en_cours' => 'En cours',
+        'a_valider' => 'À valider',
         'terminee' => 'Terminée',
         'expiree' => 'Expirée',
     ];
@@ -35,6 +36,7 @@ class Tache extends Model
     protected $fillable = [
         'titre', 'description', 'projet_id', 'responsable_id', 'cree_par', 'statut', 'deadline',
         'deadline_initiale', 'nb_reports', 'deadline_fixee_par', 'deadline_fixee_at', 'jeton_deadline', 'termine_at',
+        'commentaire_validation', 'derniere_action_par', 'derniere_action_canal',
     ];
 
     protected $hidden = ['jeton_deadline'];
@@ -82,6 +84,14 @@ class Tache extends Model
                 $t->termine_at = now();
             }
         });
+
+        static::created(fn (Tache $t) => Historique::consigner($t, 'tache', true));
+        static::updated(fn (Tache $t) => Historique::consigner($t, 'tache'));
+    }
+
+    public function historique(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Historique::class, 'objet_id')->where('objet', 'tache')->orderBy('id');
     }
 
     public function projet(): BelongsTo
@@ -130,7 +140,7 @@ class Tache extends Model
     /** Indicateur : null si terminée/expirée ou sans deadline. */
     public function getIndicateurDelaiAttribute(): ?string
     {
-        if (! in_array($this->statut, ['a_faire', 'en_cours'], true) || ! $this->deadline) {
+        if (! in_array($this->statut, ['a_faire', 'en_cours'], true) || ! $this->deadline) {  // « à valider » : le travail est rendu
             return null;
         }
         $aujourdhui = Calendrier::aujourdhui()->toDateString();
@@ -151,6 +161,12 @@ class Tache extends Model
             || $user->id === $this->cree_par
             || ($this->projet && ($user->id === $this->projet->chef_projet_id
                 || $this->projet->membres()->whereKey($user->id)->exists()));
+    }
+
+    /** Qui valide une tâche de projet terminée : le chef de projet (ou un admin). */
+    public function validablePar(User $user): bool
+    {
+        return $this->projet_id && ($user->id === $this->chefProjetId() || $user->hasRole('admin'));
     }
 
     /** Qui peut changer la deadline : chef de projet (ou admin) pour un projet, le responsable hors projet. */

@@ -20,7 +20,7 @@ class DashboardController extends Controller
             'nbEmployes' => User::where('actif', true)->count(),
             'nbProjetsEnCours' => Projet::where('statut', 'en_cours')->count(),
             'mesDemandesEnAttente' => $user->demandes()->where('statut', 'en_attente')->count(),
-            'demandesARecevoir' => $user->demandesRecues()->where('statut', 'en_attente')->count(),
+            'demandesARecevoir' => Demande::aTraiterPar($user)->count(),
             'tachesAFaire' => $user->taches()->whereIn('statut', ['a_faire', 'en_cours'])->count(),
             'deadlinesAFixer' => Tache::whereIn('projet_id', $user->projetsDiriges()->pluck('id'))
                 ->whereNull('deadline')->whereIn('statut', ['a_faire', 'en_cours'])->count(),

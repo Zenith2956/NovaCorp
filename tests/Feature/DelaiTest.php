@@ -101,9 +101,9 @@ class DelaiTest extends TestCase
         $this->actingAs($this->employe)->get("/demandes/nouvelle?refaire={$d->id}")
             ->assertOk()->assertSee('Refaire la demande #'.$d->id)->assertSee('Clavier ergonomique');
 
-        // Le statut « Expirée » ne peut pas être choisi à la main
-        $this->actingAs($this->manager)->patch("/demandes/{$this->demande()->id}/statut", ['statut' => 'expiree'])
-            ->assertSessionHasErrors('statut');
+        // L'expiration ne peut pas être déclenchée à la main (seul le cron expire)
+        $this->actingAs($this->manager)->post("/demandes/{$this->demande()->id}/action", ['action' => 'expirer'])
+            ->assertSessionHasErrors('action');
     }
 
     public function test_page_delais_et_reglage_par_les_rh(): void

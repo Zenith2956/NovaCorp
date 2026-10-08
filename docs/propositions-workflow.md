@@ -183,7 +183,7 @@ Chaque création, changement de statut ou d'étape est enregistré par trigger (
 | Étape | Contenu | État |
 | --- | --- | --- |
 | 1 | Base : `etapes_circuit`, `transitions` (vérifiées par trigger), `historique` (trigger), nouveaux champs (montant, dates de congé, étape, motif), assignation automatique du manager, valideurs par étape, mails déclenchés par les nouvelles transitions, relances / escalades par étape | Écrit (migration `2026_10_08_000004_workflow`, SQL `database/sql/2026_10_08_000004_workflow.sql`) — à appliquer puis tester |
-| 2 | Laravel : formulaire (montant, dates), valider / refuser motivé / à compléter / annuler / traiter, étape affichée, historique sur la fiche, validation des tâches par le chef | À faire |
+| 2 | Laravel : formulaire (montant, dates), valider / refuser motivé / à compléter / annuler / traiter, étape affichée, historique sur la fiche, validation des tâches par le chef | Écrit : service `app/Services/WorkflowDemande.php` (toutes les actions, appli et lien du mail), route `POST /demandes/{id}/action`, formulaire par type (montant / dates de congé, circuit affiché, manager assigné automatiquement), fiche avec circuit + boutons selon le rôle + historique, filtre « À traiter par moi », lien du mail : valider / refuser / compléter avec commentaire (connexion obligatoire pour une étape de service), tâches de projet « À valider » par le chef (valider / renvoyer avec commentaire), `WorkflowTest` (9 tests). Correctifs SQL `2026_10_08_000005` |
 | 3 | Edge Function : nouveaux modèles de mails | À faire |
 | 4 | Statistiques pour Flutter : RPC sécurisée + table de statistiques en Realtime + lien des comptes par e-mail | À faire |
 | 5 | Tests (SQL + Laravel) et démonstration | À faire |

@@ -40,7 +40,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/demandes/nouvelle', [DemandeController::class, 'create'])->name('demandes.create');
     Route::post('/demandes', [DemandeController::class, 'store'])->name('demandes.store');
     Route::get('/demandes/{demande}', [DemandeController::class, 'show'])->name('demandes.show');
-    Route::patch('/demandes/{demande}/statut', [DemandeController::class, 'updateStatut'])->name('demandes.statut');
+    Route::post('/demandes/{demande}/action', [DemandeController::class, 'action'])->name('demandes.action');
     Route::get('/pieces-jointes/{pieceJointe}', [DemandeController::class, 'telechargerPieceJointe'])->name('pieces-jointes.download');
 
     Route::get('/employes', [EmployeController::class, 'index'])->name('employes.index');
@@ -58,6 +58,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/taches', [TacheController::class, 'store'])->name('taches.store');
     Route::get('/taches/{tache}', [TacheController::class, 'show'])->name('taches.show');
     Route::patch('/taches/{tache}/statut', [TacheController::class, 'updateStatut'])->name('taches.statut');
+    Route::post('/taches/{tache}/validation', [TacheController::class, 'valider'])->name('taches.validation');
     Route::patch('/taches/{tache}/deadline', [TacheController::class, 'updateDeadline'])->name('taches.deadline');
 
     Route::get('/delais', [DelaiController::class, 'index'])

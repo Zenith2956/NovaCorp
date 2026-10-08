@@ -37,7 +37,35 @@
         </select>
         <button class="btn">Enregistrer</button>
     </form>
+    @error('statut')<div class="err">{{ $message }}</div>@enderror
+    @if ($tache->projet_id && auth()->id() !== $tache->chefProjetId())
+        <p class="muted" style="font-size:.85rem">Une tâche de projet marquée « Terminée » est envoyée au chef de projet pour validation.</p>
+    @endif
 </div>
+@endif
+
+@if ($tache->statut === 'a_valider')
+<div class="card">
+    <h2>Validation par le chef de projet</h2>
+    @if ($peutValider)
+        <form method="POST" action="{{ route('taches.validation', $tache) }}">
+            @csrf
+            <label for="commentaire_validation">Commentaire <span class="muted" style="font-weight:normal">(obligatoire pour renvoyer la tâche)</span></label>
+            <textarea id="commentaire_validation" name="commentaire_validation" rows="3">{{ old('commentaire_validation') }}</textarea>
+            @error('commentaire_validation')<div class="err">{{ $message }}</div>@enderror
+            <p class="inline" style="margin-top:1rem">
+                <button class="btn" name="decision" value="valider">Valider la tâche</button>
+                <button class="btn sec" name="decision" value="renvoyer">Renvoyer au responsable</button>
+            </p>
+        </form>
+    @else
+        <p class="muted">En attente de validation par {{ $tache->projet?->chefProjet?->nom_complet ?? 'le chef de projet' }}.</p>
+    @endif
+</div>
+@endif
+
+@if ($tache->commentaire_validation && $tache->statut === 'en_cours')
+    <div class="alert info"><strong>Renvoyée par le chef de projet :</strong> <span style="white-space:pre-line">{{ $tache->commentaire_validation }}</span></div>
 @endif
 
 @if ($peutModifierDeadline)
@@ -60,4 +88,22 @@
     @error('deadline')<div class="err">{{ $message }}</div>@enderror
 </div>
 @endif
+
+<div class="card">
+    <h2>Historique</h2>
+    <table>
+        <tr><th>Date</th><th>Changement</th><th>Par</th><th>Commentaire</th></tr>
+        @forelse ($tache->historique as $h)
+            <tr>
+                <td>{{ $h->created_at?->timezone('Europe/Paris')->format('d/m/Y H:i') }}</td>
+                <td>@if ($h->ancien_statut === null) Création ({{ \App\Models\Tache::STATUTS[$h->nouveau_statut] ?? $h->nouveau_statut }})
+                    @else {{ \App\Models\Tache::STATUTS[$h->ancien_statut] ?? $h->ancien_statut }} → <span class="badge t-{{ $h->nouveau_statut }}">{{ \App\Models\Tache::STATUTS[$h->nouveau_statut] ?? $h->nouveau_statut }}</span>@endif</td>
+                <td>{{ $h->auteur?->nom_complet ?? 'Système' }}</td>
+                <td style="white-space:pre-line">{{ $h->commentaire }}</td>
+            </tr>
+        @empty
+            <tr><td colspan="4" class="muted">Aucun événement enregistré.</td></tr>
+        @endforelse
+    </table>
+</div>
 @endsection

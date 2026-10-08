@@ -19,13 +19,13 @@ class TacheController extends Controller
 
         return view('taches.index', [
             'mesTaches' => $user->taches()->with('projet')
-                ->when(! $request->boolean('toutes'), fn ($q) => $q->whereIn('statut', ['a_faire', 'en_cours', 'expiree']))
+                ->when(! $request->boolean('toutes'), fn ($q) => $q->whereIn('statut', ['a_faire', 'en_cours', 'expiree', 'a_valider']))
                 ->orderByRaw('deadline is null')->orderBy('deadline')->get(),
             // Tâches de mes projets (chef de projet), deadline à fixer en premier
             'tachesProjets' => Tache::with(['projet', 'responsable'])
                 ->whereIn('projet_id', $user->projetsDiriges()->pluck('id'))
-                ->whereIn('statut', ['a_faire', 'en_cours', 'expiree'])
-                ->orderByRaw('deadline is not null')->orderBy('deadline')->get(),
+                ->whereIn('statut', ['a_faire', 'en_cours', 'expiree', 'a_valider'])
+                ->orderByRaw("statut <> 'a_valider'")->orderByRaw('deadline is not null')->orderBy('deadline')->get(),
         ]);
     }
 
@@ -90,24 +90,64 @@ class TacheController extends Controller
 
     public function show(Request $request, Tache $tache)
     {
-        $tache->load(['projet.chefProjet', 'responsable', 'createur']);
+        $tache->load(['projet.chefProjet', 'responsable', 'createur', 'historique.auteur']);
         abort_unless($tache->visiblePar($request->user()), 403);
 
         return view('taches.show', [
             'tache' => $tache,
             'peutModifierDeadline' => $tache->deadlineModifiablePar($request->user()) && $tache->statut !== 'terminee',
-            'peutChangerStatut' => in_array($request->user()->id, [$tache->responsable_id, $tache->chefProjetId()], true),
+            'peutChangerStatut' => in_array($request->user()->id, [$tache->responsable_id, $tache->chefProjetId()], true)
+                && ! in_array($tache->statut, ['a_valider', 'terminee'], true),
+            'peutValider' => $tache->statut === 'a_valider' && $tache->validablePar($request->user()),
             'minimum' => $tache->deadlineMinimum(),
         ]);
     }
 
     public function updateStatut(Request $request, Tache $tache)
     {
-        abort_unless(in_array($request->user()->id, [$tache->responsable_id, $tache->chefProjetId()], true), 403);
+        $user = $request->user();
+        abort_unless(in_array($user->id, [$tache->responsable_id, $tache->chefProjetId()], true), 403);
         $data = $request->validate(['statut' => ['required', Rule::in(Tache::STATUTS_MANUELS)]]);
-        $tache->update($data);
+        abort_if(in_array($tache->statut, ['a_valider', 'terminee'], true), 403, 'Tâche en attente de validation ou terminée.');
 
-        return back()->with('success', 'Statut mis à jour.');
+        // Tâche de projet terminée par le responsable : le chef de projet doit la valider
+        $statut = $data['statut'] === 'terminee' && $tache->projet_id && ! $tache->validablePar($user)
+            ? 'a_valider'
+            : $data['statut'];
+        if ($statut === $tache->statut) {
+            return back();
+        }
+        if ($tache->statut === 'expiree' && in_array($statut, ['a_faire', 'en_cours'], true)) {
+            throw ValidationException::withMessages(['statut' => 'Tâche expirée : repoussez d\'abord la deadline, ou marquez-la terminée.']);
+        }
+        $tache->update(['statut' => $statut, 'derniere_action_par' => $user->id, 'derniere_action_canal' => 'appli']);
+
+        return back()->with('success', $statut === 'a_valider'
+            ? 'Tâche envoyée au chef de projet pour validation (il est prévenu par mail).'
+            : 'Statut mis à jour.');
+    }
+
+    /** Le chef de projet valide la tâche terminée, ou la renvoie au responsable avec un commentaire. */
+    public function valider(Request $request, Tache $tache)
+    {
+        $user = $request->user();
+        abort_unless($tache->statut === 'a_valider' && $tache->validablePar($user), 403);
+        $data = $request->validate([
+            'decision' => ['required', 'in:valider,renvoyer'],
+            'commentaire_validation' => ['required_if:decision,renvoyer', 'nullable', 'string', 'max:2000'],
+        ], ['commentaire_validation.required_if' => 'Expliquez ce qu\'il reste à faire.']);
+
+        $renvoi = $data['decision'] === 'renvoyer';
+        $tache->update([
+            'statut' => $renvoi ? 'en_cours' : 'terminee',
+            'commentaire_validation' => $renvoi ? $data['commentaire_validation'] : null,
+            'derniere_action_par' => $user->id,
+            'derniere_action_canal' => 'appli',
+        ]);
+
+        return back()->with('success', $renvoi
+            ? 'Tâche renvoyée au responsable avec votre commentaire.'
+            : 'Tâche validée et terminée.');
     }
 
     /** Fixer / repousser / modifier la deadline depuis l'application. */

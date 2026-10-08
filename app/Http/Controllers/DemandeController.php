@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Mail\DemandeEnvoyee;
 use App\Models\Demande;
+use App\Models\EtapeCircuit;
 use App\Models\PieceJointe;
 use App\Models\TypeDemande;
-use App\Support\Calendrier;
 use App\Models\User;
+use App\Services\WorkflowDemande;
+use App\Support\Calendrier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -19,17 +21,18 @@ class DemandeController extends Controller
     /** Extensions autorisées : documents, vocaux, photos, vidéos. */
     private const EXTENSIONS = 'pdf,doc,docx,xls,xlsx,odt,ods,txt,csv,jpg,jpeg,png,gif,webp,heic,mp3,wav,ogg,m4a,aac,webm,mp4,mov,avi,mkv';
 
+    public function __construct(private WorkflowDemande $workflow) {}
+
     public function index(Request $request)
     {
         $user = $request->user();
 
         $demandes = Demande::with(['demandeur', 'manager'])
             ->withCount('piecesJointes')
-            // RH / admin / direction voient tout ; manager voit les siennes + celles reçues
-            ->when(! $user->hasRole('rh', 'admin', 'direction'), fn ($q) => $q->where(
-                fn ($q) => $q->where('demandeur_id', $user->id)->orWhere('manager_id', $user->id)
-            ))
+            ->visiblePar($user)
+            ->when($request->boolean('a_traiter'), fn ($q) => $q->aTraiterPar($user))
             ->when($request->filled('statut'), fn ($q) => $q->where('statut', $request->statut))
+            ->when($request->filled('type'), fn ($q) => $q->where('type', $request->type))
             ->when($request->boolean('retard'), fn ($q) => $q->where('statut', 'en_attente')
                 ->whereDate('echeance_le', '<', Calendrier::aujourdhui()->toDateString()))
             ->latest()
@@ -50,13 +53,16 @@ class DemandeController extends Controller
                 ->first();
         }
 
+        $user = $request->user();
+
         return view('demandes.create', [
             'types' => Demande::TYPES,
             'delais' => TypeDemande::all()->keyBy('code'),
+            'circuits' => EtapeCircuit::orderBy('ordre')->get()->groupBy('type_code'),
             'modele' => $modele,
-            'managers' => User::whereHas('role', fn ($q) => $q->whereIn('slug', ['manager', 'direction']))
-                ->orderBy('nom')->get(),
-            'managerParDefaut' => $request->user()->manager_id,
+            // Assignation automatique : le manager de l'employé, à défaut la direction
+            'managerPrevu' => $user->manager
+                ?? User::whereHas('role', fn ($q) => $q->where('slug', 'direction'))->where('actif', true)->orderBy('id')->first(),
         ]);
     }
 
@@ -66,17 +72,34 @@ class DemandeController extends Controller
             'type' => ['required', Rule::in(array_keys(Demande::TYPES))],
             'objet' => ['required', 'string', 'max:255'],
             'message' => ['required', 'string', 'max:5000'],
-            'manager_id' => ['required', 'exists:users,id'],
+            'montant' => [Rule::requiredIf(in_array($request->type, Demande::TYPES_AVEC_MONTANT, true)), 'nullable', 'numeric', 'min:0', 'max:99999999'],
+            'date_debut' => [Rule::requiredIf(in_array($request->type, Demande::TYPES_AVEC_DATES, true)), 'nullable', 'date'],
+            'date_fin' => [Rule::requiredIf(in_array($request->type, Demande::TYPES_AVEC_DATES, true)), 'nullable', 'date', 'after_or_equal:date_debut'],
             'date_souhaitee' => ['nullable', 'date', 'after_or_equal:'.Calendrier::aujourdhui()->toDateString()],
             'pieces_jointes' => ['nullable', 'array', 'max:5'],
             'pieces_jointes.*' => ['file', 'max:51200', 'extensions:'.self::EXTENSIONS], // 50 Mo / fichier
+        ], [
+            'montant.required' => 'Le montant est obligatoire pour ce type de demande.',
+            'date_debut.required' => 'La date de début du congé est obligatoire.',
+            'date_fin.required' => 'La date de fin du congé est obligatoire.',
+            'date_fin.after_or_equal' => 'La date de fin doit être après la date de début.',
         ]);
+
+        // On ne garde que les champs utiles au type choisi
+        if (! in_array($data['type'], Demande::TYPES_AVEC_MONTANT, true)) {
+            $data['montant'] = null;
+        }
+        if (! in_array($data['type'], Demande::TYPES_AVEC_DATES, true)) {
+            $data['date_debut'] = $data['date_fin'] = null;
+        }
 
         $demande = DB::transaction(function () use ($request, $data) {
             $demande = Demande::create([
                 ...collect($data)->except('pieces_jointes')->all(),
                 'demandeur_id' => $request->user()->id,
                 'statut' => 'en_attente',
+                'derniere_action_par' => $request->user()->id,
+                'derniere_action_canal' => 'appli',
             ]);
 
             foreach ($request->file('pieces_jointes', []) as $fichier) {
@@ -92,18 +115,20 @@ class DemandeController extends Controller
             return $demande;
         });
 
-        // Relance, échéance et deadline viennent d'être calculées (trigger PostgreSQL)
+        // Manager, jours de congé, relance, échéance et deadline viennent d'être calculés (trigger PostgreSQL)
         $demande->refresh()->load(['demandeur', 'manager', 'piecesJointes']);
+        $destinataire = $demande->manager?->nom_complet ?? 'la direction';
 
         if (config('novacorp.envoi_mail_direct')) {
             // Ancien fonctionnement : Laravel envoie le mail lui-même
-            Mail::to($demande->manager->email)->send(new DemandeEnvoyee($demande));
+            if ($demande->manager) {
+                Mail::to($demande->manager->email)->send(new DemandeEnvoyee($demande));
+            }
             $demande->update(['envoyee_at' => now()]);
-            $message = "Demande envoyée par mail à {$demande->manager->nom_complet}.";
+            $message = "Demande envoyée par mail à {$destinataire}.";
         } else {
-            // Nouveau fonctionnement : un trigger a mis le mail dans la boîte d'envoi,
-            // l'Edge Function « envoyer-mails » l'envoie dans la minute.
-            $message = "Demande enregistrée : le mail à {$demande->manager->nom_complet} part dans la minute.";
+            // Un trigger a mis le mail dans la boîte d'envoi, l'Edge Function « envoyer-mails » l'envoie dans la minute.
+            $message = "Demande enregistrée et assignée à {$destinataire} : le mail part dans la minute.";
         }
 
         return redirect()->route('demandes.show', $demande)->with('success', $message);
@@ -112,35 +137,28 @@ class DemandeController extends Controller
     public function show(Request $request, Demande $demande)
     {
         $this->autoriserLecture($request->user(), $demande);
-        $demande->load(['demandeur.role', 'manager', 'piecesJointes']);
+        $demande->load(['demandeur.role', 'manager', 'piecesJointes', 'traitePar', 'historique.auteur']);
 
-        return view('demandes.show', compact('demande'));
+        return view('demandes.show', [
+            'demande' => $demande,
+            'etapes' => $this->workflow->etapes($demande),
+            'applicables' => $this->workflow->etapesApplicables($demande)->pluck('ordre')->all(),
+            'actions' => $this->workflow->actionsPossibles($request->user(), $demande),
+            'roleTraitement' => $this->workflow->roleTraitement($demande),
+        ]);
     }
 
-    /**
-     * Validation MANUELLE : le manager a répondu par mail ou par téléphone,
-     * on reporte sa décision dans l'application.
-     */
-    public function updateStatut(Request $request, Demande $demande)
+    /** Valider, refuser, demander un complément, compléter, annuler, traiter, corriger (depuis l'application). */
+    public function action(Request $request, Demande $demande)
     {
-        $user = $request->user();
-        abort_unless($user->id === $demande->manager_id || $user->hasRole('rh', 'admin'), 403);
-
         $data = $request->validate([
-            'statut' => ['required', Rule::in(Demande::STATUTS_MANUELS)],
-        ]);
-        abort_if($demande->statut === 'expiree' && ! $user->hasRole('rh', 'admin'), 403, 'Demande expirée.');
+            'action' => ['required', Rule::in(array_keys(WorkflowDemande::ACTIONS))],
+            'commentaire' => [Rule::requiredIf($request->action === 'completer'), 'nullable', 'string', 'max:2000'],
+        ], ['commentaire.required' => 'Décrivez le complément apporté.']);
 
-        $demande->update([
-            ...$data,
-            ...($data['statut'] === 'en_attente' ? [] : [
-                'decision_at' => now(),
-                'decision_par' => $user->id,
-                'jeton_decision' => null, // les liens du mail ne servent plus
-            ]),
-        ]);
+        $message = $this->workflow->executer($data['action'], $demande, $request->user(), $data['commentaire'] ?? null);
 
-        return back()->with('success', 'Statut mis à jour.');
+        return redirect()->route('demandes.show', $demande)->with('success', $message);
     }
 
     public function telechargerPieceJointe(Request $request, PieceJointe $pieceJointe)
@@ -152,11 +170,6 @@ class DemandeController extends Controller
 
     private function autoriserLecture(User $user, Demande $demande): void
     {
-        abort_unless(
-            $user->id === $demande->demandeur_id
-            || $user->id === $demande->manager_id
-            || $user->hasRole('rh', 'admin', 'direction'),
-            403
-        );
+        abort_unless(Demande::whereKey($demande->id)->visiblePar($user)->exists(), 403);
     }
 }

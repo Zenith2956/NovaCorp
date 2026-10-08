@@ -10,7 +10,7 @@
     <div class="stat"><div class="v">{{ number_format($caDouzeMois, 0, ',', ' ') }} €</div><div class="l">CA sur 12 mois</div></div>
     <div class="stat"><div class="v">{{ $mesDemandesEnAttente }}</div><div class="l">Mes demandes en attente</div></div>
     @if ($demandesARecevoir > 0)
-        <div class="stat"><div class="v">{{ $demandesARecevoir }}</div><div class="l">Demandes à valider (manager)</div></div>
+        <div class="stat"><div class="v">{{ $demandesARecevoir }}</div><div class="l"><a href="{{ route('demandes.index', ['a_traiter' => 1]) }}">Demandes à traiter par moi</a></div></div>
     @endif
     <div class="stat"><div class="v">{{ $tachesAFaire }}</div><div class="l"><a href="{{ route('taches.index') }}">Mes tâches en cours</a></div></div>
     @if ($deadlinesAFixer > 0)

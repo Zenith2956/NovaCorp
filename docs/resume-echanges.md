@@ -10,6 +10,8 @@ Dernière mise à jour : 08/10/2026
 
 | Date | Auteur | Demande | Résultat |
 | --- | --- | --- | --- |
+| 08/10/2026 | Arthur | Faire tous les tests nécessaires pour résumer la gestion des délais | Suite SQL rejouable `supabase/tests/tests-gestion-delais.sql` : **62 / 62 OK** sur Supabase ; nouveaux tests Laravel de cohérence PHP ↔ SQL + statistiques (`CoherenceDelaisTest`) ; tableau règles ↔ tests dans `docs/tests-gestion-delais.md` |
+| 08/10/2026 | Arthur | Délais, étape 6 : démonstration complète | 10 scénarios (urgente, rappel d'échéance, escalade, expiration, deadline à fixer, relance/escalade du chef, rappel, report hors projet, report projet, tâche expirée) : 14 mails envoyés, 1 annulé à juste titre, 0 échec. Rapport `docs/tests-gestion-delais.md`. Nettoyage à faire par Arthur avant le 09/10 9 h |
 | 08/10/2026 | Arthur | Délais, étape 5 : crons | Relances / rappels / escalades (demandes + tâches) chaque jour ouvré à 9 h, expiration toutes les heures, jours fériés de l'année suivante chaque 1er décembre. Simulation sur les données actuelles : rien à envoyer aujourd'hui |
 | 08/10/2026 | Arthur | Délais, étape 4 : modèles de mails | Edge Function v3 : demandes (+ rappel d'échéance, expiration avec bouton « Refaire la demande », mention URGENT) et 7 mails de tâches ; mails devenus inutiles annulés automatiquement. Les 3 mails de tâches en attente sont partis (2 envoyés, 1 annulé car deadline déjà fixée) |
 | 08/10/2026 | Arthur | Ajouter un bouton « Retour » un peu partout | Bouton « ← Retour » sur toutes les pages connectées sauf le tableau de bord : page parente logique pour les fiches et formulaires (évite de revenir sur un formulaire déjà envoyé), sinon page précédente. 1 test |
@@ -142,7 +144,7 @@ Décision du 08/10/2026 (Arthur) : base de données hébergée sur **Supabase** 
 - [x] Remplir `.env` et lancer `php artisan migrate --seed` sur Supabase (fait le 08/10/2026).
 - [ ] (Option) Stocker les pièces jointes dans Supabase Storage (API compatible S3).
 - [x] Automatisation des mails : étapes 1 à 4 en place (08/10/2026).
-- [ ] Gestion des délais + module Tâches : mise en place en 6 étapes (voir `docs/propositions-gestion-delais.md`).
+- [x] Gestion des délais + module Tâches : 6 étapes en place et démontrées (08/10/2026).
 - [ ] Passage des mails en production : domaine vérifié chez Resend, `MAIL_EXPEDITEUR`, vider `MAIL_TEST_DESTINATAIRE`, `APP_URL` public.
 - [ ] Commiter et pousser le projet sur GitHub.
 - [ ] Lancer `php artisan test`.

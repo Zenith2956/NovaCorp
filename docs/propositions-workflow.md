@@ -186,7 +186,7 @@ Chaque création, changement de statut ou d'étape est enregistré par trigger (
 | 2 | Laravel : formulaire (montant, dates), valider / refuser motivé / à compléter / annuler / traiter, étape affichée, historique sur la fiche, validation des tâches par le chef | Écrit : service `app/Services/WorkflowDemande.php` (toutes les actions, appli et lien du mail), route `POST /demandes/{id}/action`, formulaire par type (montant / dates de congé, circuit affiché, manager assigné automatiquement), fiche avec circuit + boutons selon le rôle + historique, filtre « À traiter par moi », lien du mail : valider / refuser / compléter avec commentaire (connexion obligatoire pour une étape de service), tâches de projet « À valider » par le chef (valider / renvoyer avec commentaire), `WorkflowTest` (9 tests). Correctifs SQL `2026_10_08_000005` |
 | 3 | Edge Function : nouveaux modèles de mails | Fait : Edge Function `envoyer-mails` **v4** déployée — 9 nouveaux mails (étape suivante, à traiter, à compléter, complément reçu, annulation, traitement terminé, tâche à valider / renvoyée / validée), boutons Valider / Demander un complément / Refuser, mails adaptés aux étapes de service (« Bonjour, » + service, escalade vers la direction), motif du refus, montant et dates de congé dans les mails, annulation automatique des mails devenus inutiles (changement d'étape, demande déjà prise en charge…). Démo sur Supabase : 16 mails envoyés, 1 annulé à juste titre, 0 échec (données `[DÉMO WF]`, nettoyage : `supabase/sql/nettoyer-demo-workflow.sql`) |
 | 4 | Statistiques pour Flutter : RPC sécurisée + table de statistiques en Realtime + lien des comptes par e-mail | Écrit et testé (rollback) : `public.stats_workflow(debut, fin)` (RH / direction / admin = entreprise, manager = son équipe, autres refusés), table `stats_quotidiennes` (Realtime, RLS, recalcul à chaque changement + chaque nuit), compte Supabase relié à l'employé par e-mail **confirmé**, aucun chiffre nominatif. Migration `2026_10_08_000006` à appliquer ; mode d'emploi Flutter : `docs/stats-flutter.md` |
-| 5 | Tests (SQL + Laravel) et démonstration | À faire |
+| 5 | Tests (SQL + Laravel) et démonstration | Fait : suite SQL rejouable `supabase/tests/tests-workflow.sql` **50 / 50 OK** sur Supabase (38 workflow + 12 statistiques et droits d'accès) ; tests Laravel 37 / 37 (dont `WorkflowTest`, 9) ; démo des mails (étape 3) et démo des statistiques sur 30 jours simulés (ci-dessous) |
 
 
 ## Étape 3 – Démonstration des mails (08/10/2026, mode test : tout arrive dans la boîte de test)
@@ -199,3 +199,18 @@ Chaque création, changement de statut ou d'étape est enregistré par trigger (
 | Tâche #25 (projet 1) : à valider → renvoyée → à valider → validée aussitôt | tâche assignée · tâche à valider · tâche renvoyée (commentaire) · **tâche à valider annulée** (déjà validée) · tâche validée |
 
 Historique de la demande #30 vérifié : création (employé, appli) → étape 2 (manager, appli) → validée (comptable, mail) → en traitement → terminée.
+
+
+## Étape 5 – Démonstration des statistiques (08/10/2026, dates simulées, tout annulé ensuite)
+
+Équipe fictive (1 manager, 3 employés), 24 demandes réparties du 12/10 au 09/11/2026, décisions 1 à 4 jours après, étape RH / comptabilité selon les circuits. Résultat de `stats_workflow()` pour ce manager (30 derniers jours) :
+
+| Indicateur | Valeur |
+| --- | --- |
+| Demandes créées | 23 (congé 4, matériel 5, formation 5, note de frais 5, autre 4) |
+| Décisions | 19 : 15 validées, 4 refusées |
+| Temps moyen création → décision | **2,5 jours ouvrés** (autre 0,8 · formation 2,5 · congé 2,7 · matériel 2,8 · note de frais 4,0) |
+| Réponses avant l'échéance | **89,5 %** |
+| Services sollicités (temps moyen passé chez eux) | Managers 19 passages, 2,7 j · Comptabilité 4, 2,6 j · RH 4, 2,1 j |
+| En cours | 5 en attente, 0 en retard, 11 validées à traiter par les services |
+| Courbe `par_jour` | 1 point par jour (créées / décidées), prête pour un graphique Flutter |

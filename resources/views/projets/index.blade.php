@@ -2,13 +2,16 @@
 @section('title', 'Projets & CA')
 
 @section('content')
-<h1>Projets</h1>
+<div class="inline" style="justify-content:space-between">
+    <h1>Projets</h1>
+    @if ($peutCreer)<a class="btn" href="{{ route('projets.create') }}">+ Nouveau projet</a>@endif
+</div>
 <div class="card">
     <table>
         <tr><th>Projet</th><th>Statut</th><th>Chef de projet</th><th>Membres</th><th>Budget</th><th>CA généré</th><th>Période</th></tr>
         @foreach ($projets as $p)
             <tr>
-                <td><strong>{{ $p->nom }}</strong><br><small class="muted">{{ $p->description }}</small></td>
+                <td><a href="{{ route('projets.show', $p) }}"><strong>{{ $p->nom }}</strong></a><br><small class="muted">{{ $p->description }}</small></td>
                 <td><span class="badge">{{ str_replace('_', ' ', $p->statut) }}</span></td>
                 <td>{{ $p->chefProjet?->nom_complet }}</td>
                 <td>{{ $p->membres_count }}</td>

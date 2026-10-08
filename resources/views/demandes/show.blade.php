@@ -1,5 +1,6 @@
 @extends('layouts.app')
 @section('title', 'Demande #'.$demande->id)
+@section('retour', route('demandes.index'))
 
 @section('content')
 <div class="card">

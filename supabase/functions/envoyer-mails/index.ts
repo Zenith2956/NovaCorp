@@ -49,6 +49,9 @@ Deno.serve(async (req) => {
      where m.id in (
        select id from public.mails_sortants
         where statut = 'a_envoyer' and (prochain_essai_at is null or prochain_essai_at <= now())
+          -- TEMPORAIRE (étape 3 des délais) : les mails de tâches attendent l'étape 4 (nouveaux modèles)
+          and demande_id is not null
+          and type in ('nouvelle_demande', 'decision', 'relance', 'escalade')
         order by id limit ${LOT}
         for update skip locked)
     returning m.id, m.demande_id, m.type, m.destinataires, m.copies, m.tentatives`

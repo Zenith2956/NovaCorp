@@ -66,6 +66,16 @@ class User extends Authenticatable
         return $this->belongsToMany(Projet::class);
     }
 
+    public function taches(): HasMany
+    {
+        return $this->hasMany(Tache::class, 'responsable_id');
+    }
+
+    public function projetsDiriges(): HasMany
+    {
+        return $this->hasMany(Projet::class, 'chef_projet_id');
+    }
+
     public function hasRole(string ...$slugs): bool
     {
         return in_array($this->role?->slug, $slugs, true);

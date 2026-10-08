@@ -12,6 +12,7 @@
         <a class="brand" href="{{ route('dashboard') }}">NovaCorp</a>
         <a href="{{ route('dashboard') }}" @class(['active' => request()->routeIs('dashboard')])>Tableau de bord</a>
         <a href="{{ route('demandes.index') }}" @class(['active' => request()->routeIs('demandes.*')])>Demandes</a>
+        <a href="{{ route('taches.index') }}" @class(['active' => request()->routeIs('taches.*')])>Tâches</a>
         <a href="{{ route('employes.index') }}" @class(['active' => request()->routeIs('employes.*')])>Employés</a>
         <a href="{{ route('projets.index') }}" @class(['active' => request()->routeIs('projets.*')])>Projets & CA</a>
         @if (auth()->user()->hasRole('rh', 'direction', 'admin', 'manager'))
@@ -27,6 +28,18 @@
 @endauth
 
 <main>
+    {{-- Bouton « Retour » : page parente définie par la vue (@section('retour')),
+         sinon la page précédente, sinon le tableau de bord. --}}
+    @auth
+        @unless (request()->routeIs('dashboard'))
+            @php
+                $precedente = url()->previous();
+                $retour = trim($__env->yieldContent('retour'))
+                    ?: ($precedente !== url()->current() && str_starts_with($precedente, url('/')) ? $precedente : route('dashboard'));
+            @endphp
+            <a class="retour" href="{{ $retour }}">← Retour</a>
+        @endunless
+    @endauth
     @if (session('success'))<div class="alert ok">{{ session('success') }}</div>@endif
     @yield('content')
 </main>

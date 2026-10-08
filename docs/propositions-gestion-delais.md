@@ -182,7 +182,7 @@ Règles complémentaires validées par Arthur (08/10/2026) :
 | --- | --- |
 | 1 | Base : jours fériés, délais par type, dates sur les demandes, table `taches`, `mails_sortants` élargie, fonctions SQL — **Fait** le 08/10 (migration `2026_10_08_000003`, SQL dans `database/sql/`) et testé, voir ci-dessous |
 | 2 | Demandes dans Laravel : date souhaitée, statut Expirée, indicateur de délai, « Refaire la demande », page Délais — **Fait** le 08/10 (`App\Support\Calendrier`, modèles `TypeDemande` / `JourFerie`, `DelaiController`, page `/delais` avec réglage des délais par les RH, filtre « en retard », tests `tests/Feature/DelaiTest.php`) |
-| 3 | Projets et tâches dans Laravel : membres, création de tâches, page « Fixer la deadline » |
+| 3 | Projets et tâches dans Laravel : membres, création de tâches, page « Fixer la deadline » — **Fait** le 08/10 (modèle `Tache`, `TacheController`, pages `/taches`, `/projets/{id}`, lien `/taches/{id}/fixer-deadline/{jeton}`, tests `tests/Feature/TacheTest.php`). En attendant l'étape 4, l'Edge Function (v2) laisse de côté les mails de tâches : ils restent « à envoyer » |
 | 4 | Edge Function : nouveaux modèles de mails |
 | 5 | Crons : expiration horaire, rappels, relances / escalades |
 | 6 | Tests de démonstration avec dates simulées, puis remise en état |

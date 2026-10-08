@@ -37,4 +37,20 @@ class Projet extends Model
     {
         return $this->hasMany(ChiffreAffaire::class);
     }
+
+    public function taches(): HasMany
+    {
+        return $this->hasMany(Tache::class);
+    }
+
+    public function aPourMembre(User $user): bool
+    {
+        return $user->id === $this->chef_projet_id || $this->membres()->whereKey($user->id)->exists();
+    }
+
+    /** Le chef de projet (et la direction / l'admin) gère les membres. */
+    public function gerablePar(User $user): bool
+    {
+        return $user->id === $this->chef_projet_id || $user->hasRole('direction', 'admin');
+    }
 }

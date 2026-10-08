@@ -2,6 +2,8 @@
 
 Application interne de NovaCorp (≈120 employés) – **PHP 8.3 / Laravel 13 / vues Blade / MySQL**.
 
+Journal du projet (demandes, décisions, problèmes rencontrés) : [docs/resume-echanges.md](docs/resume-echanges.md)
+
 ## Fonctionnalités (initialisation)
 
 | Module | Contenu |

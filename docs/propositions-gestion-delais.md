@@ -184,7 +184,7 @@ Règles complémentaires validées par Arthur (08/10/2026) :
 | 2 | Demandes dans Laravel : date souhaitée, statut Expirée, indicateur de délai, « Refaire la demande », page Délais — **Fait** le 08/10 (`App\Support\Calendrier`, modèles `TypeDemande` / `JourFerie`, `DelaiController`, page `/delais` avec réglage des délais par les RH, filtre « en retard », tests `tests/Feature/DelaiTest.php`) |
 | 3 | Projets et tâches dans Laravel : membres, création de tâches, page « Fixer la deadline » — **Fait** le 08/10 (modèle `Tache`, `TacheController`, pages `/taches`, `/projets/{id}`, lien `/taches/{id}/fixer-deadline/{jeton}`, tests `tests/Feature/TacheTest.php`). En attendant l'étape 4, l'Edge Function (v2) laisse de côté les mails de tâches : ils restent « à envoyer » |
 | 4 | Edge Function : nouveaux modèles de mails — **Fait** le 08/10 (version 3 déployée : 13 types de mails, annulation automatique des mails devenus inutiles, mention URGENT, dates d'échéance et d'expiration dans les mails ; filtre temporaire retiré). Vérifié sur les 3 mails de tâches en attente : 2 envoyés, 1 annulé à juste titre (deadline déjà fixée) |
-| 5 | Crons : expiration horaire, rappels, relances / escalades |
+| 5 | Crons : expiration horaire, rappels, relances / escalades — **Fait** le 08/10 : `novacorp-relances` (jours ouvrés hors fériés, 9 h Paris) appelle `planifier_rappels()` ; `novacorp-expiration` (toutes les heures à h+5) ; `novacorp-jours-feries` (1er décembre, année suivante). SQL dans `supabase/sql/automatisation-mails.sql` |
 | 6 | Tests de démonstration avec dates simulées, puis remise en état |
 
 ## Étape 1 – tests (08/10/2026, transaction annulée, « aujourd'hui » simulé pour les tâches)

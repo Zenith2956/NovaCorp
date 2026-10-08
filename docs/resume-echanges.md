@@ -10,6 +10,7 @@ Dernière mise à jour : 08/10/2026
 
 | Date | Auteur | Demande | Résultat |
 | --- | --- | --- | --- |
+| 08/10/2026 | Arthur | Délais, étape 5 : crons | Relances / rappels / escalades (demandes + tâches) chaque jour ouvré à 9 h, expiration toutes les heures, jours fériés de l'année suivante chaque 1er décembre. Simulation sur les données actuelles : rien à envoyer aujourd'hui |
 | 08/10/2026 | Arthur | Délais, étape 4 : modèles de mails | Edge Function v3 : demandes (+ rappel d'échéance, expiration avec bouton « Refaire la demande », mention URGENT) et 7 mails de tâches ; mails devenus inutiles annulés automatiquement. Les 3 mails de tâches en attente sont partis (2 envoyés, 1 annulé car deadline déjà fixée) |
 | 08/10/2026 | Arthur | Ajouter un bouton « Retour » un peu partout | Bouton « ← Retour » sur toutes les pages connectées sauf le tableau de bord : page parente logique pour les fiches et formulaires (évite de revenir sur un formulaire déjà envoyé), sinon page précédente. 1 test |
 | 08/10/2026 | Arthur | Trouver plus facilement les membres : tri + barre de recherche | Sélecteur de membres (création de projet et page du projet) : recherche sans accents sur nom / prénom / e-mail / rôle, filtre par rôle, tri nom / prénom / rôle, compteur, « seulement la sélection », ajout de plusieurs membres d'un coup |

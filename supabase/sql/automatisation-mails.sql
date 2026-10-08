@@ -45,6 +45,21 @@ select cron.schedule('novacorp-relances', '0 7,8 * * 1-5',
   $$ select automation.planifier_relances(2, 5)
      where extract(hour from now() at time zone 'Europe/Paris') = 9; $$);
 
+-- 2 bis. (08/10/2026, gestion des délais) le job novacorp-relances appelle désormais planifier_rappels() :
+--    dates stockées sur chaque demande / tâche, délais par type, jours fériés exclus, tâches comprises.
+select cron.alter_job((select jobid from cron.job where jobname = 'novacorp-relances'),
+  schedule := '0 7,8 * * 1-5',
+  command := $$ select automation.planifier_rappels()
+               where extract(hour from now() at time zone 'Europe/Paris') = 9
+                 and automation.est_jour_ouvre(automation.aujourdhui()); $$);
+
+-- 2 ter. Expiration des demandes et tâches dont la deadline est passée : toutes les heures (h+5)
+select cron.schedule('novacorp-expiration', '5 * * * *', $$ select automation.expirer(); $$);
+
+-- 2 quater. Jours fériés de l'année suivante : chaque 1er décembre
+select cron.schedule('novacorp-jours-feries', '0 3 1 12 *',
+  $$ select automation.remplir_jours_feries(extract(year from now())::integer + 1); $$);
+
 -- 3. Ménage de l'historique pg_cron (7 jours) : dimanche 3 h UTC
 select cron.schedule('novacorp-purge-historique-cron', '0 3 * * 0',
   $$ delete from cron.job_run_details where end_time < now() - interval '7 days'; $$);
@@ -52,7 +67,8 @@ select cron.schedule('novacorp-purge-historique-cron', '0 3 * * 0',
 -- ---------------------------------------------------------------------
 -- Commandes utiles
 --   Envoyer tout de suite :       select automation.appeler_envoyer_mails();
---   Lancer les relances :         select automation.planifier_relances(2, 5);
+--   Lancer relances / rappels :   select automation.planifier_rappels();
+--   Lancer l'expiration :         select automation.expirer();
 --   Suivi des mails :             select id, demande_id, type, statut, tentatives, derniere_erreur from public.mails_sortants order by id desc;
 --   Mettre l'envoi en pause :     select cron.alter_job((select jobid from cron.job where jobname = 'novacorp-envoyer-mails'), active := false);
 --   Historique des crons :        select * from cron.job_run_details order by start_time desc limit 20;

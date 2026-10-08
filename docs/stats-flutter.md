@@ -1,5 +1,7 @@
 # Statistiques du workflow – mode d'emploi pour l'application Flutter
 
+> Un dashboard prêt à l'emploi utilisant tout ce qui suit est dans `flutter_app/` (README pour l'installer et le lancer).
+
 > Workflow, étape 4 (08/10/2026). SQL : `database/sql/2026_10_08_000006_stats_workflow.sql`.
 > Les demandes elles-mêmes restent **invisibles** depuis Flutter (RLS sans règle) : seuls des **chiffres agrégés, sans nom** sont exposés.
 

@@ -9,6 +9,7 @@ use App\Http\Controllers\DelaiController;
 use App\Http\Controllers\DemandeController;
 use App\Http\Controllers\EmployeController;
 use App\Http\Controllers\ProjetController;
+use App\Http\Controllers\StatistiqueController;
 use App\Http\Controllers\TacheController;
 use Illuminate\Support\Facades\Route;
 
@@ -65,6 +66,11 @@ Route::middleware('auth')->group(function () {
         ->middleware('role:rh,direction,admin,manager')->name('delais.index');
     Route::put('/delais/types', [DelaiController::class, 'updateTypes'])
         ->middleware('role:rh,admin')->name('delais.types');
+
+    Route::get('/statistiques', [StatistiqueController::class, 'index'])
+        ->middleware('role:rh,direction,admin,manager')->name('statistiques.index');
+    Route::get('/statistiques/donnees', [StatistiqueController::class, 'donnees'])
+        ->middleware('role:rh,direction,admin,manager')->name('statistiques.donnees');
 
     Route::get('/logs', [ConnexionLogController::class, 'index'])
         ->middleware('role:admin,rh')->name('logs.index');

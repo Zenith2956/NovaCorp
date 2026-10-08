@@ -7,7 +7,9 @@ use App\Models\Projet;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ProjetController extends Controller
 {
@@ -81,7 +83,10 @@ class ProjetController extends Controller
 
     private function valider(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
+            'reunion_frequence' => ['nullable', Rule::in(array_keys(Projet::FREQUENCES))],
+            'reunion_jour' => ['nullable', 'required_if:reunion_frequence,hebdomadaire,mensuelle', 'integer', 'between:1,5'],
+            'reunion_depuis' => ['nullable', 'required_if:reunion_frequence,bimensuelle', 'date'],
             'nom' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
             'statut' => ['required', Rule::in(array_keys(self::STATUTS))],
@@ -92,7 +97,25 @@ class ProjetController extends Controller
                 ? ['required', Rule::exists('users', 'id')] : ['nullable'],
             'membres' => ['nullable', 'array'],
             'membres.*' => ['integer', Rule::exists('users', 'id')],
+        ], [
+            'reunion_jour.required_if' => 'Choisissez le jour de la réunion.',
+            'reunion_depuis.required_if' => 'Indiquez la date de la prochaine réunion.',
         ]);
+
+        // Réunion : « toutes les 2 semaines » prend le jour de la date choisie ; sans réunion, on efface tout
+        if (empty($data['reunion_frequence'])) {
+            $data['reunion_jour'] = $data['reunion_depuis'] = null;
+        } elseif ($data['reunion_frequence'] === 'bimensuelle') {
+            $jour = Carbon::parse($data['reunion_depuis'])->dayOfWeekIso;
+            if ($jour > 5) {
+                throw ValidationException::withMessages(['reunion_depuis' => 'La réunion doit tomber un jour de semaine.']);
+            }
+            $data['reunion_jour'] = $jour;
+        } else {
+            $data['reunion_depuis'] = null;
+        }
+
+        return $data;
     }
 
     private function donneesFormulaire(Request $request, Projet $projet): array

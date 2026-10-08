@@ -48,6 +48,46 @@
             </div>
         </div>
 
+        <h2 style="margin-top:1.5rem">Réunion du projet</h2>
+        <p class="muted" style="font-size:.88rem">Le jour de la réunion à 8 h, le chef de projet et les membres reçoivent un récapitulatif
+            du projet depuis la réunion précédente (le chef reçoit aussi les demandes de son équipe). Jour férié : pas de récapitulatif.</p>
+        <div class="row">
+            <div>
+                <label for="reunion_frequence">Rythme</label>
+                <select id="reunion_frequence" name="reunion_frequence">
+                    <option value="">Pas de réunion</option>
+                    @foreach (\App\Models\Projet::FREQUENCES as $k => $v)
+                        <option value="{{ $k }}" @selected(old('reunion_frequence', $projet->reunion_frequence) === $k)>{{ $v }}</option>
+                    @endforeach
+                </select>
+                @error('reunion_frequence')<div class="err">{{ $message }}</div>@enderror
+            </div>
+            <div class="reunion-jour">
+                <label for="reunion_jour">Jour</label>
+                <select id="reunion_jour" name="reunion_jour">
+                    @foreach (\App\Models\Projet::JOURS as $k => $v)
+                        <option value="{{ $k }}" @selected((int) old('reunion_jour', $projet->reunion_jour ?? 1) === $k)>{{ ucfirst($v) }}</option>
+                    @endforeach
+                </select>
+                @error('reunion_jour')<div class="err">{{ $message }}</div>@enderror
+            </div>
+            <div class="reunion-depuis">
+                <label for="reunion_depuis">Prochaine réunion le</label>
+                <input id="reunion_depuis" type="date" name="reunion_depuis" value="{{ old('reunion_depuis', $projet->reunion_depuis?->toDateString()) }}">
+                @error('reunion_depuis')<div class="err">{{ $message }}</div>@enderror
+            </div>
+        </div>
+        <script>
+            (function () {
+                const f = document.getElementById('reunion_frequence');
+                function maj() {
+                    document.querySelector('.reunion-jour').style.display = ['hebdomadaire', 'mensuelle'].includes(f.value) ? '' : 'none';
+                    document.querySelector('.reunion-depuis').style.display = f.value === 'bimensuelle' ? '' : 'none';
+                }
+                f.addEventListener('change', maj); maj();
+            })();
+        </script>
+
         @if ($choisitChef)
             <label for="chef_projet_id">Chef de projet</label>
             <select id="chef_projet_id" name="chef_projet_id" required>

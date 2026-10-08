@@ -11,6 +11,12 @@
     </span>
 </div>
 <p class="muted">{{ $projet->description }} · chef de projet : <strong>{{ $projet->chefProjet?->nom_complet ?? '—' }}</strong></p>
+<p class="muted">Réunion : <strong>{{ $projet->description_reunion ?? 'aucune' }}</strong>
+    @if ($projet->reunion_frequence && $projet->statut === 'en_cours' && ($prochaine = $projet->prochaineReunion()))
+        · prochain récapitulatif le {{ $prochaine->format('d/m/Y') }} à 8 h
+    @endif
+    @if ($peutGerer && ! $projet->reunion_frequence) · <a href="{{ route('projets.edit', $projet) }}">choisir un jour de réunion</a>@endif
+</p>
 
 <div class="card">
     <h2>Tâches ({{ $projet->taches->count() }})</h2>

@@ -1,4 +1,4 @@
-// Edge Function « envoyer-mails » – NovaCorp (version 4 : demandes + tâches + délais + workflow)
+// Edge Function « envoyer-mails » – NovaCorp (version 5 : demandes + tâches + délais + workflow + récapitulatif + bienvenue)
 // Envoie les mails en attente de la table public.mails_sortants via l'API Resend.
 // Appelée chaque minute par pg_cron ; peut aussi être appelée à la main : select automation.appeler_envoyer_mails();
 //
@@ -13,7 +13,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { encodeBase64 } from 'jsr:@std/encoding@1/base64'
 
 // NOVACORP_DB_URL (facultatif) : chaîne de connexion à jour si SUPABASE_DB_URL garde un ancien mot de passe
-const sql = postgres((Deno.env.get('NOVACORP_DB_URL') || Deno.env.get('SUPABASE_DB_URL'))!, { max: 3, prepare: false })
+const sql = postgres((Deno.env.get('NOVACORP_DB_URL') || Deno.env.get('SUPABASE_DB_URL'))!, { max: 3, prepare: false, idle_timeout: 10 }) // connexions libérées après 10 s d'inactivité
 const storage = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -32,7 +32,7 @@ const TYPES_DEMANDE: Record<string, string> = {
 }
 
 type MailSortant = {
-  id: number; demande_id: number | null; tache_id: number | null; type: string
+  id: number; demande_id: number | null; tache_id: number | null; projet_id: number | null; user_id: number | null; type: string
   destinataires: string[]; copies: string[] | null; donnees: Record<string, unknown> | null; tentatives: number
 }
 type Contenu = { sujet: string; html: string; replyTo?: string; attachments?: { filename: string; content: string }[] }
@@ -58,13 +58,16 @@ Deno.serve(async (req) => {
         where statut = 'a_envoyer' and (prochain_essai_at is null or prochain_essai_at <= now())
         order by id limit ${LOT}
         for update skip locked)
-    returning m.id, m.demande_id, m.tache_id, m.type, m.destinataires, m.copies, m.donnees, m.tentatives`
+    returning m.id, m.demande_id, m.tache_id, m.projet_id, m.user_id, m.type, m.destinataires, m.copies, m.donnees, m.tentatives`
 
   const bilan = { envoyes: 0, echecs: 0, annules: 0 }
 
   for (const mail of lot) {
     try {
-      const contenu = mail.tache_id ? await mailTache(mail) : await mailDemande(mail)
+      const contenu = mail.projet_id ? await mailRecap(mail)
+        : mail.user_id ? await mailBienvenue(mail)
+        : mail.tache_id ? await mailTache(mail)
+        : await mailDemande(mail)
       await envoyer(mail, contenu)
       bilan.envoyes++
     } catch (e) {
@@ -463,6 +466,117 @@ async function mailTache(mail: MailSortant): Promise<Contenu> {
       }
     default:
       throw new Error(`type de mail inconnu : ${mail.type}`)
+  }
+}
+
+// =====================================================================
+// S4 – Récapitulatif du projet (jour de réunion, 8 h) et S5 – Bienvenue
+// =====================================================================
+async function mailRecap(mail: MailSortant): Promise<Contenu> {
+  const [p] = await sql`
+    select p.id, p.nom, p.statut, p.reunion_frequence, p.chef_projet_id, c.prenom as c_prenom, c.nom as c_nom
+      from public.projets p left join public.users c on c.id = p.chef_projet_id
+     where p.id = ${mail.projet_id}`
+  if (!p) throw new Error(`projet ${mail.projet_id} introuvable`)
+  if (p.statut !== 'en_cours') throw new Annule('projet plus en cours')
+
+  const don = mail.donnees ?? {}
+  const depuis = String(don.depuis)
+  const chef = don.role === 'chef'
+  const aujourdhui = String(don.date)
+
+  const taches = await sql`
+    select t.titre, t.statut, t.deadline, t.termine_at, t.nb_reports, r.prenom || ' ' || r.nom as responsable
+      from public.taches t join public.users r on r.id = t.responsable_id
+     where t.projet_id = ${p.id}
+     order by t.deadline nulls first, t.id`
+  const iso = (d: unknown) => (d ? isoDate(d as Date | string) : '')
+  const terminees = taches.filter((t) => t.statut === 'terminee')
+  const termineesPeriode = terminees.filter((t) => t.termine_at && iso(t.termine_at) >= depuis)
+  const aValider = taches.filter((t) => t.statut === 'a_valider')
+  const enRetard = taches.filter((t) => t.statut === 'expiree' || (['a_faire', 'en_cours'].includes(t.statut) && t.deadline && iso(t.deadline) < aujourdhui))
+  const sansDeadline = taches.filter((t) => ['a_faire', 'en_cours'].includes(t.statut) && !t.deadline)
+  const aVenir = taches.filter((t) => ['a_faire', 'en_cours'].includes(t.statut) && t.deadline && iso(t.deadline) >= aujourdhui).slice(0, 10)
+  const reports = taches.reduce((s, t) => s + Number(t.nb_reports ?? 0), 0)
+  const avancement = taches.length ? Math.round((100 * terminees.length) / taches.length) : 0
+
+  const liste = (titre: string, lignes: string[], vide: string) => `
+    <h3 style="font-size:15px;margin:20px 0 6px">${titre}</h3>
+    ${lignes.length ? `<ul style="margin:0;padding-left:20px">${lignes.join('')}</ul>` : `<p style="color:#667085;margin:0">${vide}</p>`}`
+  const ligneTache = (t: Record<string, any>, extra = '') =>
+    `<li>${esc(t.titre)} – ${esc(t.responsable)}${t.deadline ? ` · deadline ${dateFr(t.deadline)}` : ''}${extra}</li>`
+
+  const chiffres = `
+    <table style="border-collapse:collapse;margin:12px 0"><tr>
+      ${[['Avancement', `${avancement} %`], ['Tâches', `${terminees.length} / ${taches.length} terminées`],
+         ['Terminées depuis la dernière réunion', String(termineesPeriode.length)], ['En retard', String(enRetard.length)],
+         ['Reports de deadline', String(reports)]]
+        .map(([l, v]) => `<td style="padding:8px 14px;border:1px solid #e4e7ec"><div style="font-size:18px;font-weight:bold">${v}</div><div style="font-size:12px;color:#667085">${l}</div></td>`).join('')}
+    </tr></table>`
+
+  let demandes = ''
+  if (chef) {
+    const [d] = await sql`
+      select count(*) filter (where automation.date_paris(created_at) >= ${depuis}::date) as recues,
+             count(*) filter (where decision_at is not null and automation.date_paris(decision_at) >= ${depuis}::date and statut <> 'refusee') as approuvees,
+             count(*) filter (where decision_at is not null and automation.date_paris(decision_at) >= ${depuis}::date and statut = 'refusee') as refusees,
+             count(*) filter (where statut = 'en_attente') as en_attente,
+             count(*) filter (where statut = 'en_attente' and echeance_le < ${aujourdhui}::date) as en_retard
+        from public.demandes where manager_id = ${p.chef_projet_id}`
+    const attente = await sql`
+      select d.id, d.objet, d.type, d.echeance_le, e.prenom || ' ' || e.nom as employe
+        from public.demandes d join public.users e on e.id = d.demandeur_id
+       where d.manager_id = ${p.chef_projet_id} and d.statut = 'en_attente'
+       order by d.echeance_le limit 10`
+    demandes = `
+      <h3 style="font-size:15px;margin:24px 0 6px">Demandes de votre équipe depuis le ${dateFr(depuis)}</h3>
+      <p style="margin:0">${d.recues} reçue(s) · ${d.approuvees} approuvée(s) · ${d.refusees} refusée(s) ·
+         <strong>${d.en_attente} en attente</strong>${Number(d.en_retard) ? ` dont <strong style="color:#c92a2a">${d.en_retard} en retard</strong>` : ''}</p>
+      ${attente.length ? `<ul style="margin:6px 0 0;padding-left:20px">${attente.map((a) =>
+        `<li><a href="${APP_URL}/demandes/${a.id}">${esc(a.objet)}</a> – ${esc(a.employe)} (${TYPES_DEMANDE[a.type] ?? a.type}) · échéance ${dateFr(a.echeance_le)}</li>`).join('')}</ul>` : ''}`
+  }
+
+  return {
+    sujet: `[NovaCorp] Réunion du ${dateFr(aujourdhui)} – récapitulatif du projet ${p.nom}`,
+    html: page(`<p>Bonjour${chef ? ' ' + esc(p.c_prenom ?? '') : ''},</p>
+      <p>Voici le point du projet <strong>${esc(p.nom)}</strong> depuis la réunion précédente (${dateFr(depuis)}), pour la réunion d'aujourd'hui.</p>
+      ${chiffres}
+      ${liste('Terminées depuis la dernière réunion', termineesPeriode.map((t) => ligneTache(t)), 'Aucune.')}
+      ${liste('À valider par le chef de projet', aValider.map((t) => ligneTache(t)), 'Aucune.')}
+      ${liste('En retard', enRetard.map((t) => ligneTache(t, t.statut === 'expiree' ? ' · <strong>expirée</strong>' : '')), 'Aucune, bravo.')}
+      ${liste('Prochaines deadlines', aVenir.map((t) => ligneTache(t)), 'Aucune.')}
+      ${sansDeadline.length ? liste('Deadline à fixer', sansDeadline.map((t) => ligneTache(t)), '') : ''}
+      ${demandes}
+      <p style="margin-top:24px">${lienTexte(`${APP_URL}/projets/${p.id}`, 'Ouvrir le projet dans NovaCorp')}</p>
+      <p style="color:#667085;font-size:12px;margin-top:24px">Récapitulatif automatique envoyé le jour de la réunion du projet${chef ? ' (version chef de projet, avec les demandes de votre équipe)' : ''} – NovaCorp</p>`),
+  }
+}
+
+async function mailBienvenue(mail: MailSortant): Promise<Contenu> {
+  const [u] = await sql`
+    select u.prenom, u.nom, u.email, u.actif, r.libelle as role, m.prenom as m_prenom, m.nom as m_nom
+      from public.users u left join public.roles r on r.id = u.role_id left join public.users m on m.id = u.manager_id
+     where u.id = ${mail.user_id}`
+  if (!u) throw new Error(`utilisateur ${mail.user_id} introuvable`)
+  if (!u.actif) throw new Annule('compte désactivé')
+  const delais = await sql`select libelle, delai_escalade from public.types_demande order by libelle`
+  const manager = u.m_prenom ? `${esc(u.m_prenom)} ${esc(u.m_nom)}` : null
+  const etapes = [
+    `Connectez-vous à ${lienTexte(`${APP_URL}/connexion`, 'NovaCorp')} avec votre adresse ${esc(u.email)} et vérifiez vos informations (téléphone).`,
+    manager ? `Rencontrez votre manager, <strong>${manager}</strong> (en copie de ce mail).` : 'Présentez-vous à votre responsable.',
+    `Consultez vos ${lienTexte(`${APP_URL}/taches`, 'tâches')} et les ${lienTexte(`${APP_URL}/projets`, 'projets')} auxquels vous participez.`,
+    `Besoin de matériel ? Faites une ${lienTexte(`${APP_URL}/demandes/nouvelle`, 'demande')} : elle est envoyée automatiquement à votre manager.`,
+    'Posez vos congés prévus via une demande de type « Congé », le plus tôt possible.',
+    `Délais de réponse aux demandes : ${delais.map((d) => `${esc(d.libelle)} ${d.delai_escalade} j ouvrés`).join(', ')}.`,
+  ]
+  return {
+    sujet: `[NovaCorp] Bienvenue ${u.prenom} ! Votre checklist du premier jour`,
+    html: page(`<p>Bonjour ${esc(u.prenom)},</p>
+      <p>Bienvenue chez NovaCorp${u.role ? ` en tant que <strong>${esc(u.role)}</strong>` : ''} ! Voici votre checklist du premier jour :</p>
+      <ol style="line-height:1.8">${etapes.map((e) => `<li>☐ ${e}</li>`).join('')}</ol>
+      <p style="margin:24px 0">${bouton(`${APP_URL}/connexion`, 'Ouvrir NovaCorp', '#3b5bdb')}</p>
+      ${manager ? `<p style="color:#667085;font-size:13px">${manager}, vous êtes en copie : pensez à accueillir ${esc(u.prenom)} et à lui présenter l'équipe et ses projets.</p>` : ''}
+      <p style="color:#667085;font-size:12px;margin-top:24px">Mail automatique envoyé à la création du compte – NovaCorp</p>`),
   }
 }
 

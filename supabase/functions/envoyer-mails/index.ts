@@ -4,14 +4,16 @@
 //
 // Secrets (Edge Functions > Secrets) : RESEND_API_KEY, APP_URL,
 //   MAIL_TEST_DESTINATAIRE (si renseigné : TOUS les mails partent vers cette adresse),
-//   MAIL_EXPEDITEUR (facultatif, défaut « NovaCorp <onboarding@resend.dev> »).
+//   MAIL_EXPEDITEUR (facultatif, défaut « NovaCorp <onboarding@resend.dev> »),
+//   NOVACORP_DB_URL (facultatif, voir plus bas).
 // Sécurité : l'appel doit porter l'en-tête x-cron-secret = secret Vault « cron_secret ».
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import postgres from 'https://deno.land/x/postgresjs@v3.4.5/mod.js'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { encodeBase64 } from 'jsr:@std/encoding@1/base64'
 
-const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 3, prepare: false })
+// NOVACORP_DB_URL (facultatif) : chaîne de connexion à jour si SUPABASE_DB_URL garde un ancien mot de passe
+const sql = postgres((Deno.env.get('NOVACORP_DB_URL') || Deno.env.get('SUPABASE_DB_URL'))!, { max: 3, prepare: false })
 const storage = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,

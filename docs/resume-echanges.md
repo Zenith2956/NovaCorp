@@ -10,6 +10,7 @@ Dernière mise à jour : 08/10/2026
 
 | Date | Auteur | Demande | Résultat |
 | --- | --- | --- | --- |
+| 08/10/2026 | Arthur | Tester et prouver l'automatisation des mails (dates manipulées puis remises en place) | 5 scénarios + panne : tous conformes ; rapport dans `docs/tests-automatisation-mails.md` ; données de démo supprimées par Arthur, état vérifié (demande #5 seule, cron actif) |
 | 08/10/2026 | Arthur | Test des liens Valider / Refuser puis étape 4 (crons) | Circuit complet validé (demande #5) ; 3 crons actifs ; SQL Supabase versionné dans `supabase/sql/` |
 | 08/10/2026 | Arthur | Étape 3 : secrets Resend créés dans Supabase | Edge Function `envoyer-mails` déployée et testée (1er mail réel, PDF joint) ; Laravel n'envoie plus lui-même (`ENVOI_MAIL_DIRECT=false`) |
 | 08/10/2026 | Arthur | Test réel de l'étape 2 (demande #5 avec PDF) | Validé dans Supabase ; heures affichées en heure de Paris (stockage en UTC) |

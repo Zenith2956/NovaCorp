@@ -10,7 +10,14 @@
     <div class="stat"><div class="v">{{ number_format($caDouzeMois, 0, ',', ' ') }} €</div><div class="l">CA sur 12 mois</div></div>
     <div class="stat"><div class="v">{{ $mesDemandesEnAttente }}</div><div class="l">Mes demandes en attente</div></div>
     @if ($demandesARecevoir > 0)
-        <div class="stat"><div class="v">{{ $demandesARecevoir }}</div><div class="l">Demandes à valider (manager)</div></div>
+        <div class="stat"><div class="v">{{ $demandesARecevoir }}</div><div class="l"><a href="{{ route('demandes.index', ['a_traiter' => 1]) }}">Demandes à traiter par moi</a></div></div>
+    @endif
+    <div class="stat"><div class="v">{{ $tachesAFaire }}</div><div class="l"><a href="{{ route('taches.index') }}">Mes tâches en cours</a></div></div>
+    @if ($deadlinesAFixer > 0)
+        <div class="stat"><div class="v" style="color:var(--wait)">{{ $deadlinesAFixer }}</div><div class="l"><a href="{{ route('taches.index') }}">Deadlines à fixer (chef de projet)</a></div></div>
+    @endif
+    @if ($demandesEnRetard > 0)
+        <div class="stat"><div class="v" style="color:var(--ko)">{{ $demandesEnRetard }}</div><div class="l"><a href="{{ route('demandes.index', ['retard' => 1]) }}">Demandes en retard</a></div></div>
     @endif
 </div>
 
@@ -24,7 +31,7 @@
         <tr>
             <td><a href="{{ route('demandes.show', $d) }}">{{ $d->objet }}</a></td>
             <td>{{ $d->manager?->nom_complet }}</td>
-            <td>{{ $d->envoyee_at?->format('d/m/Y H:i') }}</td>
+            <td>{{ $d->envoyee_at?->timezone('Europe/Paris')->format('d/m/Y H:i') }}</td>
             <td><span class="badge b-{{ $d->statut }}">{{ $d->statut_libelle }}</span></td>
         </tr>
         @if ($loop->last)</table>@endif

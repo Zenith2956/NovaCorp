@@ -1,6 +1,6 @@
 # NovaCorp
 
-Application interne de NovaCorp (≈120 employés) – **PHP 8.3 / Laravel 13 / vues Blade / MySQL**.
+Application interne de NovaCorp (≈120 employés) – **PHP 8.3 / Laravel 13 / vues Blade / PostgreSQL (Supabase)**.
 
 Journal du projet (demandes, décisions, problèmes rencontrés) : [docs/resume-echanges.md](docs/resume-echanges.md)
 
@@ -23,7 +23,7 @@ Journal du projet (demandes, décisions, problèmes rencontrés) : [docs/resume-
 
 ## Installation (Windows – Laragon, XAMPP ou WAMP)
 
-Prérequis : PHP ≥ 8.3 (extensions `pdo_mysql`, `fileinfo`, `mbstring`), Composer, MySQL/MariaDB.
+Prérequis : PHP ≥ 8.3 (extensions `pdo_pgsql`, `pgsql`, `zip`, `fileinfo`, `mbstring`, `openssl`), Composer, un projet Supabase.
 
 ```bash
 composer install
@@ -31,8 +31,7 @@ copy .env.example .env          # (cp sous Linux/Mac)
 php artisan key:generate
 ```
 
-Créer la base `novacorp` dans MySQL (phpMyAdmin ou `CREATE DATABASE novacorp CHARACTER SET utf8mb4;`),
-adapter `DB_USERNAME` / `DB_PASSWORD` dans `.env`, puis :
+Dans `.env`, renseigner la connexion Supabase (Connect → Direct → Session pooler) et `DB_PASSWORD`, puis :
 
 ```bash
 php artisan migrate --seed      # crée les tables + 120 employés + projets + CA

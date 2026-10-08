@@ -14,9 +14,10 @@ class EmployeController extends Controller
 
         $employes = User::with(['role', 'manager'])
             ->when($recherche->isNotEmpty(), fn ($q) => $q->where(fn ($q) => $q
-                ->where('nom', 'like', "%{$recherche}%")
-                ->orWhere('prenom', 'like', "%{$recherche}%")
-                ->orWhere('email', 'like', "%{$recherche}%")))
+                // whereLike = insensible à la casse (ILIKE sous PostgreSQL)
+                ->whereLike('nom', "%{$recherche}%")
+                ->orWhereLike('prenom', "%{$recherche}%")
+                ->orWhereLike('email', "%{$recherche}%")))
             ->when($request->filled('role'), fn ($q) => $q->where('role_id', $request->role))
             ->orderBy('nom')
             ->paginate(20)

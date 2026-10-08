@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Demande extends Model
 {
@@ -22,11 +23,30 @@ class Demande extends Model
         'refusee' => 'Refusée',
     ];
 
-    protected $fillable = ['demandeur_id', 'manager_id', 'type', 'objet', 'message', 'statut', 'envoyee_at'];
+    protected $fillable = [
+        'demandeur_id', 'manager_id', 'type', 'objet', 'message', 'statut', 'envoyee_at',
+        'decision_at', 'decision_par', 'jeton_decision',
+    ];
+
+    protected $hidden = ['jeton_decision'];
 
     protected function casts(): array
     {
-        return ['envoyee_at' => 'datetime'];
+        return [
+            'envoyee_at' => 'datetime',
+            'decision_at' => 'datetime',
+        ];
+    }
+
+    protected static function booted(): void
+    {
+        // Jeton des liens Valider / Refuser envoyés au manager
+        static::creating(fn (Demande $demande) => $demande->jeton_decision ??= (string) Str::uuid());
+    }
+
+    public function mailsSortants(): HasMany
+    {
+        return $this->hasMany(MailSortant::class);
     }
 
     public function demandeur(): BelongsTo

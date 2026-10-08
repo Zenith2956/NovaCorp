@@ -24,7 +24,7 @@
         <tr>
             <td><a href="{{ route('demandes.show', $d) }}">{{ $d->objet }}</a></td>
             <td>{{ $d->manager?->nom_complet }}</td>
-            <td>{{ $d->envoyee_at?->format('d/m/Y H:i') }}</td>
+            <td>{{ $d->envoyee_at?->timezone('Europe/Paris')->format('d/m/Y H:i') }}</td>
             <td><span class="badge b-{{ $d->statut }}">{{ $d->statut_libelle }}</span></td>
         </tr>
         @if ($loop->last)</table>@endif

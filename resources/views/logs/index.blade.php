@@ -8,7 +8,7 @@
         <tr><th>Date</th><th>Évènement</th><th>Utilisateur</th><th>E-mail saisi</th><th>IP</th></tr>
         @foreach ($logs as $log)
             <tr>
-                <td>{{ $log->created_at?->format('d/m/Y H:i:s') }}</td>
+                <td>{{ $log->created_at?->timezone('Europe/Paris')->format('d/m/Y H:i:s') }}</td>
                 <td><span @class(['badge', 'b-refusee' => $log->evenement === 'echec', 'b-validee' => $log->evenement === 'connexion'])>{{ $log->evenement }}</span></td>
                 <td>{{ $log->user?->nom_complet ?? '—' }}</td>
                 <td>{{ $log->email }}</td>

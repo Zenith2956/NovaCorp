@@ -1,23 +1,33 @@
 # NovaCorp – Résumé des échanges
 
-> Journal du projet : mes demandes et les propositions de Claude.
-> **À mettre à jour à chaque nouvelle session de travail** (ajouter une entrée dans « Historique » en haut, puis compléter les sections concernées).
+> Journal du projet, partagé entre deux personnes : les demandes de chacun (auteur indiqué) et les propositions de Claude.
+> **À mettre à jour à chaque nouvelle session de travail** (ajouter une entrée dans « Historique » en haut **avec le nom de l'auteur de la demande**, puis compléter les sections concernées).
 > Version en ligne : https://claude.ai/code/artifact/aad29b72-0640-4703-99fa-5082f2a1dcaf
 
 Dernière mise à jour : 08/10/2026
 
 ## Historique
 
-| Date | Demande | Résultat |
-| --- | --- | --- |
-| 08/10/2026 | Connexion à Supabase + `migrate --seed` | Connecté : 16 tables, 120 employés, 12 projets, 48 lignes de CA ; RLS actif partout |
-| 08/10/2026 | Passer de MariaDB à PostgreSQL (Supabase) | Code adapté (recherche ILIKE, RLS Supabase, tests), `.env.example` en pgsql |
-| 08/10/2026 | Annonce : la base passera sur Supabase et le code sur GitHub | Décision notée ; étapes de migration dans « Pistes suivantes » |
-| 07/10/2026 | Créer un résumé des échanges et l'intégrer au projet | Ce fichier `docs/resume-echanges.md` |
-| 07/10/2026 | Résoudre les erreurs d'installation (Composer, MySQL) | Application lancée avec MariaDB 12.2 |
-| 07/10/2026 | Initialiser le projet (PHP, Laravel/Blade, MySQL) | Squelette complet : auth, logs, employés, demandes par mail, projets, CA |
+| Date | Auteur | Demande | Résultat |
+| --- | --- | --- | --- |
+| 08/10/2026 | Arthur | Test des liens Valider / Refuser puis étape 4 (crons) | Circuit complet validé (demande #5) ; 3 crons actifs ; SQL Supabase versionné dans `supabase/sql/` |
+| 08/10/2026 | Arthur | Étape 3 : secrets Resend créés dans Supabase | Edge Function `envoyer-mails` déployée et testée (1er mail réel, PDF joint) ; Laravel n'envoie plus lui-même (`ENVOI_MAIL_DIRECT=false`) |
+| 08/10/2026 | Arthur | Test réel de l'étape 2 (demande #5 avec PDF) | Validé dans Supabase ; heures affichées en heure de Paris (stockage en UTC) |
+| 08/10/2026 | Arthur | Envoi d'une pièce jointe : « cURL error 60: SSL certificate » vers Supabase Storage | Ajout du fichier de certificats `cacert.pem` dans `php.ini` (curl.cainfo, openssl.cafile) |
+| 08/10/2026 | Arthur | `php artisan test` : échec « GD extension is not installed » | Test corrigé (faux fichier sans GD) ; `extension=gd` activée par Arthur ; 6 tests OK |
+| 08/10/2026 | Arthur | Étape 2 de l'automatisation (clé S3 Supabase générée, paquet S3 installé) | Pièces jointes dans Supabase Storage, liens Valider / Refuser, interrupteur `ENVOI_MAIL_DIRECT` |
+| 08/10/2026 | Arthur | Mettre en place l'automatisation des mails étape par étape (Resend, X=2, Y=5, escalade RH + N+2, liens Valider/Refuser) | Étape 1 faite : migration `mails_sortants` + triggers + fonction de relance, testée sur Supabase |
+| 08/10/2026 | Arthur | Comparer la proposition du groupe (Edge Functions + Cron : création, décision, relance, escalade) avec celles de Claude | Comparaison + synthèse « périmètre du groupe + boîte d'envoi » dans `docs/propositions-automatisation-mails.md` |
+| 08/10/2026 | Arthur | Proposer (sans mettre en place) l'automatisation des mails avec Edge Functions + Cron Supabase | 3 propositions dans `docs/propositions-automatisation-mails.md` ; en attente de la proposition d'Arthur pour comparer |
+| 08/10/2026 | Arthur | Projet partagé à deux : préciser l'auteur des demandes | Colonne « Auteur » ajoutée ; demandes passées attribuées à Arthur |
+| 08/10/2026 | Arthur | Connexion à Supabase + `migrate --seed` | Connecté : 16 tables, 120 employés, 12 projets, 48 lignes de CA ; RLS actif partout |
+| 08/10/2026 | Arthur | Passer de MariaDB à PostgreSQL (Supabase) | Code adapté (recherche ILIKE, RLS Supabase, tests), `.env.example` en pgsql |
+| 08/10/2026 | Arthur | Annonce : la base passera sur Supabase et le code sur GitHub | Décision notée ; étapes de migration dans « Pistes suivantes » |
+| 07/10/2026 | Arthur | Créer un résumé des échanges et l'intégrer au projet | Ce fichier `docs/resume-echanges.md` |
+| 07/10/2026 | Arthur | Résoudre les erreurs d'installation (Composer, MySQL) | Application lancée avec MariaDB 12.2 |
+| 07/10/2026 | Arthur | Initialiser le projet (PHP, Laravel/Blade, MySQL) | Squelette complet : auth, logs, employés, demandes par mail, projets, CA |
 
-## Mes demandes
+## Demandes initiales (Arthur, 07/10/2026)
 
 Initialiser le projet NovaCorp en PHP avec le framework Laravel (vues Blade) et une base MySQL/MariaDB.
 
@@ -55,6 +65,8 @@ Limite actuelle : l'application envoie les mails mais ne lit pas encore les rép
 
 | Problème | Cause | Solution |
 | --- | --- | --- |
+| Upload vers Supabase Storage : « cURL error 60: unable to get local issuer certificate » | PHP sous Windows n'a pas de liste d'autorités de certificat pour HTTPS | Télécharger https://curl.se/ca/cacert.pem dans `C:\php\extras\ssl\`, puis dans `php.ini` : `curl.cainfo` et `openssl.cafile` vers ce fichier ; relancer `php artisan serve` |
+| `php artisan test` : « GD extension is not installed » | `UploadedFile::fake()->image()` a besoin de l'extension GD | Test passé à `UploadedFile::fake()->create('photo.jpg', 200, 'image/jpeg')` ; `extension=gd` activée dans `php.ini` |
 | `migrate` : timeout sur `Connection: mysql, Port: 3306` | Dans `.env`, seul `DB_HOST` avait été changé | Passer aussi `DB_CONNECTION=pgsql`, `DB_PORT=5432`, `DB_DATABASE=postgres`, `DB_USERNAME=postgres.<réf>`, `DB_SSLMODE=require` et le mot de passe Supabase |
 | `composer install` échoue sur `invalid path 'tests/fixtures/env/nul.env'` | Extension PHP `zip` désactivée : Composer clone les paquets avec git, et Windows refuse le nom de fichier `nul` | Activer `zip`, `fileinfo`, `mbstring`, `openssl`, `pdo_mysql`, `curl` dans `C:\php\php.ini`, supprimer `vendor`, relancer `composer install --prefer-dist` |
 | `vendor/autoload.php` introuvable | Conséquence du problème précédent : `vendor` incomplet | Réglé par la réinstallation |
@@ -63,7 +75,7 @@ Limite actuelle : l'application envoie les mails mais ne lit pas encore les rép
 
 ## Procédure d'installation qui fonctionne
 
-1. Dans `C:\php\php.ini`, activer `zip`, `fileinfo`, `mbstring`, `openssl`, `pdo_mysql`, `curl` ; mettre `upload_max_filesize = 50M` et `post_max_size = 260M`.
+1. Dans `C:\php\php.ini`, activer `zip`, `fileinfo`, `mbstring`, `openssl`, `curl`, `gd`, `pdo_pgsql`, `pgsql` ; renseigner `curl.cainfo` et `openssl.cafile` (fichier `cacert.pem`) ; mettre `upload_max_filesize = 50M` et `post_max_size = 260M`.
 2. `composer install --prefer-dist`
 3. `copy .env.example .env` puis `php artisan key:generate`
 4. `& "C:\Program Files\MariaDB 12.2\bin\mariadb.exe" -u root -p`
@@ -107,10 +119,12 @@ Procédure :
 
 ## Pistes suivantes
 
-Décision du 08/10/2026 : base de données hébergée sur **Supabase** (PostgreSQL) et code sur **GitHub** (https://github.com/Zenith2956/NovaCorp).
+Décision du 08/10/2026 (Arthur) : base de données hébergée sur **Supabase** (PostgreSQL) et code sur **GitHub** (https://github.com/Zenith2956/NovaCorp).
 
 - [x] Remplir `.env` et lancer `php artisan migrate --seed` sur Supabase (fait le 08/10/2026).
 - [ ] (Option) Stocker les pièces jointes dans Supabase Storage (API compatible S3).
+- [x] Automatisation des mails : étapes 1 à 4 en place (08/10/2026).
+- [ ] Passage des mails en production : domaine vérifié chez Resend, `MAIL_EXPEDITEUR`, vider `MAIL_TEST_DESTINATAIRE`, `APP_URL` public.
 - [ ] Commiter et pousser le projet sur GitHub.
 - [ ] Lancer `php artisan test`.
 - [ ] Lire automatiquement les réponses mail des managers (IMAP) pour tracer la validation.

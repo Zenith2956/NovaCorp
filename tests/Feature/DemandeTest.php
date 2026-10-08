@@ -69,7 +69,7 @@ class DemandeTest extends TestCase
             'manager_id' => $manager->id,
             'pieces_jointes' => [
                 UploadedFile::fake()->create('justificatif.pdf', 100, 'application/pdf'),
-                UploadedFile::fake()->image('photo.jpg'),
+                UploadedFile::fake()->create('photo.jpg', 200, 'image/jpeg'), // sans l'extension GD
             ],
         ])->assertRedirect();
 
@@ -86,5 +86,34 @@ class DemandeTest extends TestCase
         // Un autre employé ne peut pas voir la demande
         $autre = User::factory()->create(['role_id' => $this->role('dev')]);
         $this->actingAs($autre)->get("/demandes/{$demandeId}")->assertForbidden();
+    }
+
+    public function test_decision_par_lien_du_mail(): void
+    {
+        $manager = User::factory()->create(['role_id' => $this->role('manager')]);
+        $employe = User::factory()->create(['role_id' => $this->role('dev'), 'manager_id' => $manager->id]);
+        $demande = \App\Models\Demande::create([
+            'demandeur_id' => $employe->id, 'manager_id' => $manager->id,
+            'type' => 'conge', 'objet' => 'Pont de mai', 'message' => 'Merci', 'statut' => 'en_attente',
+        ]);
+        $jeton = $demande->jeton_decision;
+        $this->assertNotNull($jeton);
+
+        // Le GET n'enregistre rien
+        $this->get("/decision/{$demande->id}/{$jeton}?choix=validee")->assertOk()->assertSee('Valider la demande');
+        $this->assertSame('en_attente', $demande->fresh()->statut);
+
+        // Mauvais jeton refusé
+        $this->post("/decision/{$demande->id}/mauvais-jeton", ['choix' => 'validee'])->assertSee('Lien expiré');
+
+        // Bon jeton : décision enregistrée, jeton consommé
+        $this->post("/decision/{$demande->id}/{$jeton}", ['choix' => 'refusee'])->assertSee('Décision enregistrée');
+        $demande->refresh();
+        $this->assertSame('refusee', $demande->statut);
+        $this->assertSame($manager->id, $demande->decision_par);
+        $this->assertNull($demande->jeton_decision);
+
+        // Lien réutilisé : refusé
+        $this->post("/decision/{$demande->id}/{$jeton}", ['choix' => 'validee'])->assertSee('Lien expiré');
     }
 }

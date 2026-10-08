@@ -28,7 +28,7 @@
                 <td>{{ $d->demandeur->nom_complet }}</td>
                 <td>{{ $d->manager?->nom_complet }}</td>
                 <td>{{ $d->pieces_jointes_count ?: '–' }}</td>
-                <td>{{ $d->envoyee_at?->format('d/m/Y H:i') }}</td>
+                <td>{{ $d->envoyee_at?->timezone('Europe/Paris')->format('d/m/Y H:i') }}</td>
                 <td><span class="badge b-{{ $d->statut }}">{{ $d->statut_libelle }}</span></td>
             </tr>
         @empty

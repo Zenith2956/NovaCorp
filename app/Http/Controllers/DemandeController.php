@@ -66,7 +66,7 @@ class DemandeController extends Controller
             foreach ($request->file('pieces_jointes', []) as $fichier) {
                 $demande->piecesJointes()->create([
                     'nom_original' => $fichier->getClientOriginalName(),
-                    'chemin' => $fichier->store("demandes/{$demande->id}", 'local'),
+                    'chemin' => $fichier->store("demandes/{$demande->id}", config('novacorp.disque_pieces_jointes')),
                     'mime_type' => $fichier->getMimeType(),
                     'categorie' => PieceJointe::categorieDepuisMime($fichier->getMimeType()),
                     'taille' => $fichier->getSize(),
@@ -76,13 +76,20 @@ class DemandeController extends Controller
             return $demande;
         });
 
-        // Envoi du mail au manager (avec pièces jointes)
         $demande->load(['demandeur', 'manager', 'piecesJointes']);
-        Mail::to($demande->manager->email)->send(new DemandeEnvoyee($demande));
-        $demande->update(['envoyee_at' => now()]);
 
-        return redirect()->route('demandes.show', $demande)
-            ->with('success', "Demande envoyée par mail à {$demande->manager->nom_complet}.");
+        if (config('novacorp.envoi_mail_direct')) {
+            // Ancien fonctionnement : Laravel envoie le mail lui-même
+            Mail::to($demande->manager->email)->send(new DemandeEnvoyee($demande));
+            $demande->update(['envoyee_at' => now()]);
+            $message = "Demande envoyée par mail à {$demande->manager->nom_complet}.";
+        } else {
+            // Nouveau fonctionnement : un trigger a mis le mail dans la boîte d'envoi,
+            // l'Edge Function « envoyer-mails » l'envoie dans la minute.
+            $message = "Demande enregistrée : le mail à {$demande->manager->nom_complet} part dans la minute.";
+        }
+
+        return redirect()->route('demandes.show', $demande)->with('success', $message);
     }
 
     public function show(Request $request, Demande $demande)
@@ -106,7 +113,14 @@ class DemandeController extends Controller
             'statut' => ['required', Rule::in(array_keys(Demande::STATUTS))],
         ]);
 
-        $demande->update($data);
+        $demande->update([
+            ...$data,
+            ...($data['statut'] === 'en_attente' ? [] : [
+                'decision_at' => now(),
+                'decision_par' => $user->id,
+                'jeton_decision' => null, // les liens du mail ne servent plus
+            ]),
+        ]);
 
         return back()->with('success', 'Statut mis à jour.');
     }
@@ -115,7 +129,7 @@ class DemandeController extends Controller
     {
         $this->autoriserLecture($request->user(), $pieceJointe->demande);
 
-        return Storage::disk('local')->download($pieceJointe->chemin, $pieceJointe->nom_original);
+        return Storage::disk(config('novacorp.disque_pieces_jointes'))->download($pieceJointe->chemin, $pieceJointe->nom_original);
     }
 
     private function autoriserLecture(User $user, Demande $demande): void

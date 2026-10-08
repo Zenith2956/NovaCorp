@@ -12,7 +12,7 @@
         <tr><th style="width:200px">Type</th><td>{{ $demande->type_libelle }}</td></tr>
         <tr><th>Demandeur</th><td>{{ $demande->demandeur->nom_complet }} ({{ $demande->demandeur->role?->libelle }}) – {{ $demande->demandeur->email }} – {{ $demande->demandeur->telephone }}</td></tr>
         <tr><th>Manager</th><td>{{ $demande->manager?->nom_complet }} – {{ $demande->manager?->email }} – {{ $demande->manager?->telephone }}</td></tr>
-        <tr><th>Envoyée le</th><td>{{ $demande->envoyee_at?->format('d/m/Y à H:i') ?? 'Non envoyée' }}</td></tr>
+        <tr><th>Envoyée le</th><td>{{ $demande->envoyee_at?->timezone('Europe/Paris')->format('d/m/Y à H:i') ?? 'Non envoyée' }}</td></tr>
     </table>
 
     <h2 style="margin-top:1.5rem">Message</h2>

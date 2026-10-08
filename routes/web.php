@@ -4,12 +4,19 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\ConnexionLogController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DecisionController;
 use App\Http\Controllers\DemandeController;
 use App\Http\Controllers\EmployeController;
 use App\Http\Controllers\ProjetController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/tableau-de-bord');
+
+// --- Liens Valider / Refuser des mails (sans connexion, jeton à usage unique) ---
+Route::middleware('throttle:20,1')->group(function () {
+    Route::get('/decision/{demande}/{jeton}', [DecisionController::class, 'show'])->name('decision.show');
+    Route::post('/decision/{demande}/{jeton}', [DecisionController::class, 'store'])->name('decision.store');
+});
 
 // --- Invités : connexion / inscription ---
 Route::middleware('guest')->group(function () {

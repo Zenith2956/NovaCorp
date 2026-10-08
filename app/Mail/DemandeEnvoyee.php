@@ -42,7 +42,7 @@ class DemandeEnvoyee extends Mailable
     public function attachments(): array
     {
         return $this->demande->piecesJointes
-            ->map(fn ($pj) => Attachment::fromStorageDisk('local', $pj->chemin)
+            ->map(fn ($pj) => Attachment::fromStorageDisk(config('novacorp.disque_pieces_jointes'), $pj->chemin)
                 ->as($pj->nom_original)
                 ->withMime($pj->mime_type ?? 'application/octet-stream'))
             ->all();

@@ -47,6 +47,19 @@ return [
             'report' => false,
         ],
 
+        // Supabase Storage via son API compatible S3 (bucket privé « pieces-jointes »)
+        'supabase' => [
+            'driver' => 's3',
+            'key' => env('SUPABASE_S3_KEY_ID'),
+            'secret' => env('SUPABASE_S3_SECRET'),
+            'region' => env('SUPABASE_S3_REGION', 'eu-west-1'),
+            'bucket' => env('SUPABASE_S3_BUCKET', 'pieces-jointes'),
+            'endpoint' => env('SUPABASE_S3_ENDPOINT'),
+            'use_path_style_endpoint' => true,
+            'throw' => true,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

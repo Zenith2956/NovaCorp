@@ -10,6 +10,7 @@ Dernière mise à jour : 08/10/2026
 
 | Date | Auteur | Demande | Résultat |
 | --- | --- | --- | --- |
+| 08/10/2026 | Arthur | Délais, étape 4 : modèles de mails | Edge Function v3 : demandes (+ rappel d'échéance, expiration avec bouton « Refaire la demande », mention URGENT) et 7 mails de tâches ; mails devenus inutiles annulés automatiquement. Les 3 mails de tâches en attente sont partis (2 envoyés, 1 annulé car deadline déjà fixée) |
 | 08/10/2026 | Arthur | Ajouter un bouton « Retour » un peu partout | Bouton « ← Retour » sur toutes les pages connectées sauf le tableau de bord : page parente logique pour les fiches et formulaires (évite de revenir sur un formulaire déjà envoyé), sinon page précédente. 1 test |
 | 08/10/2026 | Arthur | Trouver plus facilement les membres : tri + barre de recherche | Sélecteur de membres (création de projet et page du projet) : recherche sans accents sur nom / prénom / e-mail / rôle, filtre par rôle, tri nom / prénom / rôle, compteur, « seulement la sélection », ajout de plusieurs membres d'un coup |
 | 08/10/2026 | Arthur | Pas de bouton ni de page pour créer un projet | Ajout de « + Nouveau projet » (managers, direction, admin) et « Modifier le projet ». Un manager devient chef de son projet ; la direction / l'admin choisit le chef. Membres choisis à la création. 1 test ajouté. Menu : bouton Déconnexion qui ne passe plus à la ligne |

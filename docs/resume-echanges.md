@@ -10,6 +10,10 @@ Dernière mise à jour : 08/10/2026
 
 | Date | Auteur | Demande | Résultat |
 | --- | --- | --- | --- |
+| 08/10/2026 | Arthur | Règles des tâches : le chef de projet peut assigner ; report de deadline ≥ 1 jour (les 5 jours ouvrés seulement à la création) ; modification par l'employé hors projet → notification à son supérieur | Spécification complétée dans `docs/propositions-gestion-delais.md` |
+| 08/10/2026 | Arthur | Valider la synthèse des délais + nouveau module Tâches (projet = groupe ; deadline fixée par le chef de projet, ≥ 5 j ouvrés ; tâche hors projet : deadline libre par l'employé) | Spécification et plan en 6 étapes dans `docs/propositions-gestion-delais.md` (non mis en place) |
+| 08/10/2026 | Arthur | Comparer la proposition du groupe (deadline, trigger d'expiration, mail « expirée ») | Comparaison + synthèse dans `docs/propositions-gestion-delais.md` ; point bloquant : un trigger ne réagit pas au temps → cron horaire |
+| 08/10/2026 | Arthur | Proposer (sans mettre en place) la gestion des délais | 3 propositions dans `docs/propositions-gestion-delais.md` ; en attente de la proposition du groupe |
 | 08/10/2026 | Arthur | Tester et prouver l'automatisation des mails (dates manipulées puis remises en place) | 5 scénarios + panne : tous conformes ; rapport dans `docs/tests-automatisation-mails.md` ; données de démo supprimées par Arthur, état vérifié (demande #5 seule, cron actif) |
 | 08/10/2026 | Arthur | Test des liens Valider / Refuser puis étape 4 (crons) | Circuit complet validé (demande #5) ; 3 crons actifs ; SQL Supabase versionné dans `supabase/sql/` |
 | 08/10/2026 | Arthur | Étape 3 : secrets Resend créés dans Supabase | Edge Function `envoyer-mails` déployée et testée (1er mail réel, PDF joint) ; Laravel n'envoie plus lui-même (`ENVOI_MAIL_DIRECT=false`) |
@@ -125,6 +129,7 @@ Décision du 08/10/2026 (Arthur) : base de données hébergée sur **Supabase** 
 - [x] Remplir `.env` et lancer `php artisan migrate --seed` sur Supabase (fait le 08/10/2026).
 - [ ] (Option) Stocker les pièces jointes dans Supabase Storage (API compatible S3).
 - [x] Automatisation des mails : étapes 1 à 4 en place (08/10/2026).
+- [ ] Gestion des délais + module Tâches : mise en place en 6 étapes (voir `docs/propositions-gestion-delais.md`).
 - [ ] Passage des mails en production : domaine vérifié chez Resend, `MAIL_EXPEDITEUR`, vider `MAIL_TEST_DESTINATAIRE`, `APP_URL` public.
 - [ ] Commiter et pousser le projet sur GitHub.
 - [ ] Lancer `php artisan test`.

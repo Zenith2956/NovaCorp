@@ -157,9 +157,10 @@ BEGIN
     UPDATE public.demandes SET statut = 'validee' WHERE id = n;
     CREATE OR REPLACE FUNCTION automation.aujourdhui() RETURNS date LANGUAGE sql STABLE SET search_path = '' AS $f$ SELECT date '2026-12-15' $f$;
     PERFORM automation.planifier_rappels(); PERFORM automation.expirer();
-    PERFORM pg_temp.verif('R12', 'demande validée : mail « décision », ni relance ni expiration',
+    -- (depuis le workflow, la validation prévient aussi le service qui traite : « a_traiter »)
+    PERFORM pg_temp.verif('R12', 'demande validée : mails « décision » + « à traiter », ni relance ni expiration',
         (SELECT string_agg(type, ',' ORDER BY id) FROM public.mails_sortants WHERE demande_id = n) || ' ' || (SELECT statut FROM public.demandes WHERE id = n),
-        'nouvelle_demande,decision validee');
+        'nouvelle_demande,decision,a_traiter validee');
 
     -- =================================================================
     -- 4. Tâches : règles de deadline (aujourd'hui = lundi 09/11)

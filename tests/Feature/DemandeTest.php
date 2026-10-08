@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Mail\DemandeEnvoyee;
 use App\Models\ConnexionLog;
+use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -20,6 +21,11 @@ class DemandeTest extends TestCase
     {
         parent::setUp();
         $this->seed(RoleSeeder::class);
+    }
+
+    private function role(string $slug): int
+    {
+        return Role::where('slug', $slug)->value('id');
     }
 
     public function test_connexion_et_journalisation(): void
@@ -40,7 +46,7 @@ class DemandeTest extends TestCase
     {
         $this->post('/inscription', [
             'prenom' => 'Jeanne', 'nom' => 'Martin', 'email' => 'jeanne@novacorp.fr',
-            'telephone' => '0600000000', 'role_id' => 5,
+            'telephone' => '0600000000', 'role_id' => $this->role('dev'),
             'password' => 'motdepasse', 'password_confirmation' => 'motdepasse',
         ])->assertRedirect('/tableau-de-bord');
 
@@ -53,8 +59,8 @@ class DemandeTest extends TestCase
         Mail::fake();
         Storage::fake('local');
 
-        $manager = User::factory()->create(['role_id' => 3]);
-        $employe = User::factory()->create(['role_id' => 5, 'manager_id' => $manager->id]);
+        $manager = User::factory()->create(['role_id' => $this->role('manager')]);
+        $employe = User::factory()->create(['role_id' => $this->role('dev'), 'manager_id' => $manager->id]);
 
         $this->actingAs($employe)->post('/demandes', [
             'type' => 'conge',
@@ -78,7 +84,7 @@ class DemandeTest extends TestCase
         $this->assertDatabaseHas('demandes', ['id' => $demandeId, 'statut' => 'validee']);
 
         // Un autre employé ne peut pas voir la demande
-        $autre = User::factory()->create(['role_id' => 5]);
+        $autre = User::factory()->create(['role_id' => $this->role('dev')]);
         $this->actingAs($autre)->get("/demandes/{$demandeId}")->assertForbidden();
     }
 }

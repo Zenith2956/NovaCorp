@@ -10,6 +10,10 @@ Dernière mise à jour : 08/10/2026
 
 | Date | Auteur | Demande | Résultat |
 | --- | --- | --- | --- |
+| 08/10/2026 | Arthur | Workflow, étape 1 (base de données) | Migration écrite : circuits (9 étapes), machine à états (25 transitions vérifiées par trigger), historique automatique, montant / dates de congé / étape / motif, assignation automatique du manager, mails des nouvelles transitions, relances et escalades par étape. En attente de `php artisan migrate` |
+| 08/10/2026 | Arthur | Valider la synthèse du workflow (seuils 500 € / 5 jours, tout membre du service valide, traitement RH / compta / admin, comptes reliés par e-mail) | Spécification et plan en 5 étapes dans `docs/propositions-workflow.md` ; étape 1 lancée |
+| 08/10/2026 | Arthur | Comparer la proposition du groupe pour le workflow (trigger + assignation, validation + log, relances, dashboard Flutter Realtime) | Points 1-3 déjà presque en place (manquent : assignation auto, historique) ; point 4 bloqué tant que Flutter n'a pas d'accès (RLS sans règle, comptes non reliés à Supabase Auth) → options RPC / vues / table de stats en Realtime. Synthèse dans `docs/propositions-workflow.md` |
+| 08/10/2026 | Arthur | Proposer (sans mettre en place) l'automatisation du workflow, avant la jonction avec la version de sa collègue | 3 propositions dans `docs/propositions-workflow.md` (statuts + historique / circuits par type / moteur complet) + point sur la jonction des deux schémas ; en attente de la proposition du groupe |
 | 08/10/2026 | Arthur | Faire tous les tests nécessaires pour résumer la gestion des délais | Suite SQL rejouable `supabase/tests/tests-gestion-delais.sql` : **62 / 62 OK** sur Supabase ; nouveaux tests Laravel de cohérence PHP ↔ SQL + statistiques (`CoherenceDelaisTest`) ; tableau règles ↔ tests dans `docs/tests-gestion-delais.md` |
 | 08/10/2026 | Arthur | Délais, étape 6 : démonstration complète | 10 scénarios (urgente, rappel d'échéance, escalade, expiration, deadline à fixer, relance/escalade du chef, rappel, report hors projet, report projet, tâche expirée) : 14 mails envoyés, 1 annulé à juste titre, 0 échec. Rapport `docs/tests-gestion-delais.md`. Nettoyage à faire par Arthur avant le 09/10 9 h |
 | 08/10/2026 | Arthur | Délais, étape 5 : crons | Relances / rappels / escalades (demandes + tâches) chaque jour ouvré à 9 h, expiration toutes les heures, jours fériés de l'année suivante chaque 1er décembre. Simulation sur les données actuelles : rien à envoyer aujourd'hui |
@@ -145,6 +149,8 @@ Décision du 08/10/2026 (Arthur) : base de données hébergée sur **Supabase** 
 - [ ] (Option) Stocker les pièces jointes dans Supabase Storage (API compatible S3).
 - [x] Automatisation des mails : étapes 1 à 4 en place (08/10/2026).
 - [x] Gestion des délais + module Tâches : 6 étapes en place et démontrées (08/10/2026).
+- [ ] Workflow : choisir entre les propositions de `docs/propositions-workflow.md`.
+- [ ] Jonction avec la version de la collègue : choisir le schéma de référence.
 - [ ] Passage des mails en production : domaine vérifié chez Resend, `MAIL_EXPEDITEUR`, vider `MAIL_TEST_DESTINATAIRE`, `APP_URL` public.
 - [ ] Commiter et pousser le projet sur GitHub.
 - [ ] Lancer `php artisan test`.

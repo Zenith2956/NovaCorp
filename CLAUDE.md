@@ -10,3 +10,6 @@
 - Mails : jamais d'envoi direct depuis Laravel. On ajoute une ligne dans `mails_sortants` (trigger ou SQL) ;
   l'Edge Function `supabase/functions/envoyer-mails` l'envoie (cron chaque minute). Voir `docs/propositions-automatisation-mails.md`.
   Après modification de la fonction : la redéployer sur Supabase.
+- Supabase contient aussi le **schéma « anglais » du collègue d'Arthur** (`requests`, `employees`, `projects`, `attachments`,
+  `request_types`, `audit_logs`, `role_rules`, fonctions `my_role`…, triggers sur `auth.users`). L'appli Laravel ne l'utilise pas.
+  **Ne pas le modifier ni le supprimer sans l'accord de son auteur.** Sauvegarde : `supabase/archives/schema-anglais-2026-10-08.sql`.

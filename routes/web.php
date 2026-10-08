@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\ConnexionLogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DecisionController;
+use App\Http\Controllers\DelaiController;
 use App\Http\Controllers\DemandeController;
 use App\Http\Controllers\EmployeController;
 use App\Http\Controllers\ProjetController;
@@ -41,6 +42,11 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/employes', [EmployeController::class, 'index'])->name('employes.index');
     Route::get('/projets', [ProjetController::class, 'index'])->name('projets.index');
+
+    Route::get('/delais', [DelaiController::class, 'index'])
+        ->middleware('role:rh,direction,admin,manager')->name('delais.index');
+    Route::put('/delais/types', [DelaiController::class, 'updateTypes'])
+        ->middleware('role:rh,admin')->name('delais.types');
 
     Route::get('/logs', [ConnexionLogController::class, 'index'])
         ->middleware('role:admin,rh')->name('logs.index');

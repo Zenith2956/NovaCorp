@@ -23,3 +23,5 @@ table{width:100%;border-collapse:collapse;font-size:.93rem}th,td{text-align:left
 .err{color:var(--ko);font-size:.85rem}.muted{color:var(--muted)}.inline{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}.inline>*{width:auto}
 .pagination{margin-top:1rem}.pagination ul{display:flex;gap:.3rem;list-style:none;padding:0;flex-wrap:wrap}.pagination li>*{display:block;padding:.3rem .65rem;border:1px solid var(--line);border-radius:6px;background:#fff}.pagination li.active>*{background:var(--pri);color:#fff}.pagination .d-sm-none{display:none}.pagination p.small{color:var(--muted);font-size:.85rem}
 @media(max-width:640px){.row{grid-template-columns:1fr}}
+.b-expiree{background:#f1f3f5;color:#495057}.b-urgente{background:#fff0f6;color:#c2255c}
+.i-dans_les_temps{background:#e7f5ff;color:#1971c2}.i-echeance_proche{background:#fff4e6;color:var(--wait)}.i-en_retard{background:#fff5f5;color:var(--ko)}

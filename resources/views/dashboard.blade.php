@@ -12,6 +12,9 @@
     @if ($demandesARecevoir > 0)
         <div class="stat"><div class="v">{{ $demandesARecevoir }}</div><div class="l">Demandes à valider (manager)</div></div>
     @endif
+    @if ($demandesEnRetard > 0)
+        <div class="stat"><div class="v" style="color:var(--ko)">{{ $demandesEnRetard }}</div><div class="l"><a href="{{ route('demandes.index', ['retard' => 1]) }}">Demandes en retard</a></div></div>
+    @endif
 </div>
 
 <div class="card">

@@ -14,6 +14,9 @@
         <a href="{{ route('demandes.index') }}" @class(['active' => request()->routeIs('demandes.*')])>Demandes</a>
         <a href="{{ route('employes.index') }}" @class(['active' => request()->routeIs('employes.*')])>Employés</a>
         <a href="{{ route('projets.index') }}" @class(['active' => request()->routeIs('projets.*')])>Projets & CA</a>
+        @if (auth()->user()->hasRole('rh', 'direction', 'admin', 'manager'))
+            <a href="{{ route('delais.index') }}" @class(['active' => request()->routeIs('delais.*')])>Délais</a>
+        @endif
         @if (auth()->user()->hasRole('admin', 'rh'))
             <a href="{{ route('logs.index') }}" @class(['active' => request()->routeIs('logs.*')])>Logs</a>
         @endif

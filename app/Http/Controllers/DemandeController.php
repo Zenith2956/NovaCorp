@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Mail\DemandeEnvoyee;
 use App\Models\Demande;
 use App\Models\PieceJointe;
+use App\Models\TypeDemande;
+use App\Support\Calendrier;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +30,8 @@ class DemandeController extends Controller
                 fn ($q) => $q->where('demandeur_id', $user->id)->orWhere('manager_id', $user->id)
             ))
             ->when($request->filled('statut'), fn ($q) => $q->where('statut', $request->statut))
+            ->when($request->boolean('retard'), fn ($q) => $q->where('statut', 'en_attente')
+                ->whereDate('echeance_le', '<', Calendrier::aujourdhui()->toDateString()))
             ->latest()
             ->paginate(15)
             ->withQueryString();
@@ -37,8 +41,19 @@ class DemandeController extends Controller
 
     public function create(Request $request)
     {
+        // « Refaire la demande » : pré-remplissage à partir d'une demande expirée de l'employé
+        $modele = null;
+        if ($request->filled('refaire')) {
+            $modele = Demande::where('id', $request->integer('refaire'))
+                ->where('demandeur_id', $request->user()->id)
+                ->where('statut', 'expiree')
+                ->first();
+        }
+
         return view('demandes.create', [
             'types' => Demande::TYPES,
+            'delais' => TypeDemande::all()->keyBy('code'),
+            'modele' => $modele,
             'managers' => User::whereHas('role', fn ($q) => $q->whereIn('slug', ['manager', 'direction']))
                 ->orderBy('nom')->get(),
             'managerParDefaut' => $request->user()->manager_id,
@@ -52,6 +67,7 @@ class DemandeController extends Controller
             'objet' => ['required', 'string', 'max:255'],
             'message' => ['required', 'string', 'max:5000'],
             'manager_id' => ['required', 'exists:users,id'],
+            'date_souhaitee' => ['nullable', 'date', 'after_or_equal:'.Calendrier::aujourdhui()->toDateString()],
             'pieces_jointes' => ['nullable', 'array', 'max:5'],
             'pieces_jointes.*' => ['file', 'max:51200', 'extensions:'.self::EXTENSIONS], // 50 Mo / fichier
         ]);
@@ -76,7 +92,8 @@ class DemandeController extends Controller
             return $demande;
         });
 
-        $demande->load(['demandeur', 'manager', 'piecesJointes']);
+        // Relance, échéance et deadline viennent d'être calculées (trigger PostgreSQL)
+        $demande->refresh()->load(['demandeur', 'manager', 'piecesJointes']);
 
         if (config('novacorp.envoi_mail_direct')) {
             // Ancien fonctionnement : Laravel envoie le mail lui-même
@@ -110,8 +127,9 @@ class DemandeController extends Controller
         abort_unless($user->id === $demande->manager_id || $user->hasRole('rh', 'admin'), 403);
 
         $data = $request->validate([
-            'statut' => ['required', Rule::in(array_keys(Demande::STATUTS))],
+            'statut' => ['required', Rule::in(Demande::STATUTS_MANUELS)],
         ]);
+        abort_if($demande->statut === 'expiree' && ! $user->hasRole('rh', 'admin'), 403, 'Demande expirée.');
 
         $demande->update([
             ...$data,

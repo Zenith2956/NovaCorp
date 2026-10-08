@@ -139,6 +139,8 @@ Décisions restantes : délais par type, date souhaitée obligatoire ou non (con
 
 ### A. Demandes (circuit de validation)
 
+Date souhaitée : **libre** (aucun minimum, confirmé par Arthur le 08/10) ; une date proche rend la demande urgente. Le minimum de 5 jours ouvrés ne concerne que les tâches de projet.
+
 | Date | Calcul | Effet |
 | --- | --- | --- |
 | Relance | Délai de relance du type (jours ouvrés, fériés exclus) | Mail de relance au manager |
@@ -178,9 +180,29 @@ Règles complémentaires validées par Arthur (08/10/2026) :
 
 | Étape | Contenu |
 | --- | --- |
-| 1 | Base : jours fériés, délais par type, dates sur les demandes, table `taches`, `mails_sortants` élargie, fonctions SQL |
-| 2 | Demandes dans Laravel : date souhaitée, statut Expirée, indicateur de délai, « Refaire la demande », page Délais |
+| 1 | Base : jours fériés, délais par type, dates sur les demandes, table `taches`, `mails_sortants` élargie, fonctions SQL — **Fait** le 08/10 (migration `2026_10_08_000003`, SQL dans `database/sql/`) et testé, voir ci-dessous |
+| 2 | Demandes dans Laravel : date souhaitée, statut Expirée, indicateur de délai, « Refaire la demande », page Délais — **Fait** le 08/10 (`App\Support\Calendrier`, modèles `TypeDemande` / `JourFerie`, `DelaiController`, page `/delais` avec réglage des délais par les RH, filtre « en retard », tests `tests/Feature/DelaiTest.php`) |
 | 3 | Projets et tâches dans Laravel : membres, création de tâches, page « Fixer la deadline » |
 | 4 | Edge Function : nouveaux modèles de mails |
 | 5 | Crons : expiration horaire, rappels, relances / escalades |
 | 6 | Tests de démonstration avec dates simulées, puis remise en état |
+
+## Étape 1 – tests (08/10/2026, transaction annulée, « aujourd'hui » simulé pour les tâches)
+
+| Règle | Résultat |
+| --- | --- |
+| Pâques 2026 / 2027 | 05/04/2026 ✅ / 28/03/2027 ✅ ; 22 jours fériés créés (2026 + 2027) |
+| Jours ouvrés avec férié | lundi 09/11 + 2 jours ouvrés = jeudi 12/11 (11/11 sauté) ✅ ; veille ouvrée du 12/11 = 10/11 ✅ |
+| Demande « Matériel » du 08/10 | relance 09/10, échéance 13/10, deadline 20/10 ✅ |
+| Congé avec date souhaitée lundi 12/10 | urgente ✅, échéance avancée au 09/10, deadline 12/10 ✅ |
+| Demande du 28/09 | relance + escalade planifiées ✅ ; second passage : 0 (pas de doublon) ✅ ; deadline 08/10 → expirera le 09/10 (une deadline est valable jusqu'au soir) |
+| Tâche hors projet dans le passé | refusée ✅ |
+| Tâche hors projet : deadline modifiée | mail au manager avec ancienne / nouvelle date ✅ |
+| Tâche de projet, responsable non membre | refusée ✅ |
+| Tâche créée par un membre | jeton créé, mail « fixer la deadline » au chef de projet ✅ |
+| Deadline à +3 jours ouvrés | refusée : « au plus tôt le 15/10/2026 (création + 5 jours ouvrés) » ✅ |
+| Fixée au 15/10 puis repoussée au 16/10 | acceptée, deadline initiale conservée, 1 report, jeton consommé ✅ ; avancer au 14/10 refusé ✅ |
+| Tâche assignée par le chef de projet | deadline fixée par lui, mail au responsable (assignation) ✅ |
+| Simulation au 14/10 | rappel « veille » pour les tâches à échéance le 15/10, pas pour celle du 16/10 ✅ |
+| Simulation au 19/10 | 3 tâches expirées, 3 mails d'expiration ✅ |
+| Report d'une tâche expirée | redevient « à faire », 2 reports ✅ |

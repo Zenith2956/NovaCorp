@@ -51,3 +51,15 @@ budget formation 1 200 € non reportable.
   (`sessionId` préfixé par son identifiant).
 - `.env` : `N8N_CHAT_URL` (URL de production du Chat Trigger), `N8N_CHAT_USER`, `N8N_CHAT_PASSWORD`. URL vide = pas de bulle.
 - n8n éteint : la bulle affiche « L'assistant RH est indisponible pour le moment… ». Test : `AssistantRhTest`.
+- Fenêtre de 440 × 680 px par défaut, **redimensionnable** avec la poignée du coin haut-gauche (double-clic : agrandir / taille normale) ; la taille choisie est retenue dans le navigateur.
+
+## Partie 5 – Agent + consultation des demandes
+
+- Vue **`public.v_demandes_employe`** (migration `supabase/migrations/20261009180000_vue_demandes_employe.sql`) : une ligne par demande
+  avec l'email de l'employé et seulement les colonnes utiles (type, objet, statut en clair, étape et valideur en cours, dates, montant,
+  commentaire de refus / complément). Ni message complet, ni jetons, ni pièces jointes. `security_invoker`, lecture réservée à `service_role`
+  (testé : `anon` refusé).
+- Sous-workflow **`TOOL – Consulter demandes employé`** : entrée `email` → Supabase *Get Many* sur la vue, filtre `email = …`.
+- **Différence avec le sujet (sécurité)** : l'email n'est pas choisi par l'IA (`$fromAI('email')`) mais pris dans `metadata.email` du Chat
+  Trigger, rempli **par Laravel** depuis la session. Un employé qui écrit « je suis paul@novacorp.fr » ne voit que ses propres demandes.
+  Conséquence : la consultation se teste depuis la bulle du site (le chat de test de n8n n'envoie pas d'email).

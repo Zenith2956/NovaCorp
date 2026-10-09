@@ -44,5 +44,6 @@
     @if (session('success'))<div class="alert ok">{{ session('success') }}</div>@endif
     @yield('content')
 </main>
+@include('partials.assistant-rh')
 </body>
 </html>

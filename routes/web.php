@@ -6,6 +6,7 @@ use App\Http\Controllers\ConnexionLogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DecisionController;
 use App\Http\Controllers\DelaiController;
+use App\Http\Controllers\AssistantRhController;
 use App\Http\Controllers\BrouillonIaController;
 use App\Http\Controllers\DemandeController;
 use App\Http\Controllers\EmployeController;
@@ -50,6 +51,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/employes', [EmployeController::class, 'index'])->name('employes.index');
     Route::put('/mon-suppleant', SuppleantController::class)->name('suppleant.moi');
+    Route::post('/assistant-rh', AssistantRhController::class)->middleware('throttle:20,1')->name('assistant-rh');
     Route::put('/employes/{user}/suppleant', SuppleantController::class)->name('suppleant.employe');
     Route::get('/projets', [ProjetController::class, 'index'])->name('projets.index');
     Route::get('/projets/nouveau', [ProjetController::class, 'create'])->name('projets.create');

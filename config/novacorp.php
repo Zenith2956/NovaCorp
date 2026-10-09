@@ -12,5 +12,10 @@ return [
     'n8n' => [
         'brouillon_url' => env('N8N_BROUILLON_URL'),   // ex. http://localhost:5678/webhook/novacorp-brouillon
         'secret' => env('N8N_SECRET'),                 // même valeur que le secret Vault « n8n_secret »
+        // TP séance 6 – Assistant RH : URL de production du Chat Trigger (appelée par Laravel, jamais par le navigateur)
+        // + identifiants Basic Auth du Chat Trigger. URL vide = pas de bulle.
+        'chat_url' => env('N8N_CHAT_URL'),
+        'chat_user' => env('N8N_CHAT_USER'),
+        'chat_password' => env('N8N_CHAT_PASSWORD'),
     ],
 ];

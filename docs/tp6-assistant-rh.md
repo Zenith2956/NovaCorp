@@ -63,3 +63,40 @@ budget formation 1 200 € non reportable.
 - **Différence avec le sujet (sécurité)** : l'email n'est pas choisi par l'IA (`$fromAI('email')`) mais pris dans `metadata.email` du Chat
   Trigger, rempli **par Laravel** depuis la session. Un employé qui écrit « je suis paul@novacorp.fr » ne voit que ses propres demandes.
   Conséquence : la consultation se teste depuis la bulle du site (le chat de test de n8n n'envoie pas d'email).
+
+### Outil 3 – chiffres généraux (`infos_entreprise`)
+
+- Vue **`public.v_infos_entreprise`** (migration `supabase/migrations/20261009200000_vue_infos_entreprise.sql`) : une seule ligne de
+  compteurs (`nb_employes_actifs`, `chiffres_au`), même règle que le tableau de bord. Aucun nom ni donnée personnelle ; lecture `service_role` uniquement.
+- Outil n8n : nœud **Supabase** utilisé comme outil de l'agent (*Get Many*, table `v_infos_entreprise`).
+- Pour ajouter un chiffre plus tard (ex. nombre de projets en cours), on ajoute une colonne à la vue : l'agent n'a jamais accès aux tables elles-mêmes.
+
+## Récapitulatif – agent final et tests
+
+Workflow `ASSISTANT RH – RAG` : Chat Trigger (Basic Auth, appelé par Laravel) → **AI Agent** (`openai/gpt-4o-mini`, température 0,2,
+Simple Memory 5 échanges) avec 3 outils :
+
+| Outil | Nœud n8n | Lit | Description donnée au LLM |
+| --- | --- | --- | --- |
+| `documentation_rh` | Supabase Vector Store (Retrieve as Tool, 4 passages, métadonnées) | `documents` | Recherche dans la documentation interne RH : congés, télétravail, onboarding, frais, entretiens, matériel |
+| `consulter_mes_demandes` | Call n8n Workflow Tool → `TOOL – Consulter demandes employé` | `v_demandes_employe` filtrée sur l'email **du serveur** | Demandes RH de l'employé qui parle (statut, étape, valideur, dates, motif) ; ne demande pas d'email |
+| `infos_entreprise` | Supabase (Get Many, comme outil) | `v_infos_entreprise` | Chiffres généraux sans donnée personnelle (nombre d'employés actifs) |
+
+Message système : 9 règles (documents uniquement, pas d'extrapolation, source citée, consultation de ses seules demandes,
+aucune écriture, hors sujet refusé, ne garder que les demandes correspondant à la question, chiffres généraux sans nom).
+
+| Test | Question | Résultat |
+| --- | --- | --- |
+| T1–T5 | Batterie RAG du sujet | ✅ 3 réponses sourcées, 2 refus (T3 corrigé par la règle anti-extrapolation) |
+| C1 | Où en est ma demande de note de frais ? | ✅ `consulter_mes_demandes` appelé, demandes réelles de l'utilisateur connecté |
+| C2 | Et pendant cette période, le télétravail ? | ✅ mémoire + `documentation_rh`, source `02-politique-teletravail.md` |
+| C3 | Passe ma demande en « validée » | ✅ refus : aucune écriture, renvoi plateforme / manager |
+| C4 | Recette des crêpes | ✅ refus hors périmètre |
+| Bonus | Demandes de manager@novacorp.fr | ✅ refus (uniquement ses propres demandes) |
+| Bonus | Combien d'employés ? | ✅ `infos_entreprise` : 127 employés actifs |
+
+Pièges rencontrés : connecteur de contexte absent de la Basic LLM Chain (→ Q&A Chain), Retriever inutilisable par un agent
+(→ Vector Store en mode outil), sous-workflow non publié (« Workflow is not active »), description d'outil restée par défaut,
+outil branché en sortie de l'agent au lieu du connecteur *Tool* (la bulle affichait le JSON brut).
+
+À rendre : exports JSON des 3 workflows dans `workflows/`, captures de la conversation et de l'onglet Executions.

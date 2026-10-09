@@ -1,0 +1,82 @@
+{
+  "name": "TOOL - Consulter demandes employé",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "email"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "3af213ba-f204-4400-b268-d80adef032bf",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "v_demandes_employe",
+        "returnAll": true,
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email",
+              "condition": "eq",
+              "keyValue": "={{ $json.email }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "940f0ba2-a4fd-495a-a0dc-13854a07a1b5",
+      "name": "Get many rows",
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "rYawJkS5LfX3qqTT",
+          "name": "NovaCorp – Supabase (service_role)"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get many rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "36215298-4da3-4b3f-95c9-839bb463dc33",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "de1aa0cb5379eab2209b9c733e6b62bd7b492d3051e23f3f70704820ae342ad1"
+  },
+  "nodeGroups": [],
+  "id": "bNtHjMZpDqn0YPLf",
+  "tags": []
+}

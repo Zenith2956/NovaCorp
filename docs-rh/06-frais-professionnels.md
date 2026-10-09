@@ -26,4 +26,4 @@ Le manager valide les frais ; au-delà de 150 € par note, le service RH contre
 
 ---
 
-*Fichier source : 06-frais-professionnels.md — NovaCorp, document interne, diffusion restreinte aux employés. Texte extrait du PDF de même nom (docs-rh/version_PDF/).*
+*Fichier source : 06-frais-professionnels.md — NovaCorp, document interne, diffusion restreinte aux employés. Version mise en page : docs-rh/version_PDF/06 - NovaCorp — Remboursement des frais professionnels.pdf.*

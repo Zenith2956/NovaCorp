@@ -32,4 +32,4 @@ Aucun justificatif n'est demandé pour un décès : NovaCorp fait confiance à l
 
 ---
 
-*Fichier source : 04-conges-exceptionnels.md — NovaCorp, document interne, diffusion restreinte aux employés. Texte extrait du PDF de même nom (docs-rh/version_PDF/).*
+*Fichier source : 04-conges-exceptionnels.md — NovaCorp, document interne, diffusion restreinte aux employés. Version mise en page : docs-rh/version_PDF/04 - NovaCorp — Congés exceptionnels et événements familiaux.pdf.*

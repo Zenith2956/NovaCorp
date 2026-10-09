@@ -30,4 +30,4 @@ Le télétravail depuis l'étranger est interdit, sauf accord écrit préalable 
 
 ---
 
-*Fichier source : 02-politique-teletravail.md — NovaCorp, document interne, diffusion restreinte aux employés. Texte extrait du PDF de même nom (docs-rh/version_PDF/).*
+*Fichier source : 02-politique-teletravail.md — NovaCorp, document interne, diffusion restreinte aux employés. Version mise en page : docs-rh/version_PDF/02 - NovaCorp — Politique de télétravail.pdf.*

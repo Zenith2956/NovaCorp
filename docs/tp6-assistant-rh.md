@@ -25,11 +25,15 @@ Suivi du TP, étape par étape (Arthur). Plan : 1. Supabase `vector` + table `do
 
 ## Documents RH (`docs-rh/`)
 
-Le pack reçu (`public/DocumentsRH/*.pdf`) ne contient que des PDF « imprimés » (images, sans texte sélectionnable).
-Le texte a été extrait par OCR (tesseract, français), relu et remis en forme dans **`docs-rh/*.md`** (8 fichiers, mêmes noms) :
-ce sont eux qu'ingère n8n ; les PDF restent les versions « de façade » à montrer aux employés.
-Points vérifiés sur les PDF : 2 jours de télétravail (mardi, jeudi), > 10 jours de congés → manager + RH, barème décès (tante absente),
-budget formation 1 200 € non reportable.
+- **`docs-rh/*.md`** (8 fichiers) : le texte des documents, c'est lui qu'ingère n8n. Chaque fichier porte son nom en tête et en pied
+  (« Fichier source : … ») pour que l'assistant puisse le citer.
+- **`docs-rh/version_PDF/`** : les versions mises en page à montrer aux employés (« 01 - NovaCorp — FAQ Congés annuels.pdf », …),
+  hors de `public/` car « diffusion restreinte aux employés ».
+- Historique : le premier pack PDF était « imprimé » (images sans texte) ; le texte avait été extrait par OCR puis relu.
+  Les PDF refaits le 09/10/2026 contiennent du vrai texte : comparaison automatique PDF ↔ Markdown, **contenu identique**
+  pour les 8 documents (seuls les pieds de page diffèrent), donc pas de changement de fond pour l'assistant.
+- Points vérifiés : 2 jours de télétravail (mardi, jeudi), > 10 jours de congés → manager + RH, barème décès (tante absente),
+  budget formation 1 200 € non reportable.
 
 ## Partie 4 – Workflow `ASSISTANT RH – RAG`
 

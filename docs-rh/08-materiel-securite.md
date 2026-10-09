@@ -28,4 +28,4 @@ En cas de perte ou de vol, prévenir immédiatement le service IT par téléphon
 
 ---
 
-*Fichier source : 08-materiel-securite.md — NovaCorp, document interne, diffusion restreinte aux employés. Texte extrait du PDF de même nom (docs-rh/version_PDF/).*
+*Fichier source : 08-materiel-securite.md — NovaCorp, document interne, diffusion restreinte aux employés. Version mise en page : docs-rh/version_PDF/08 - NovaCorp — Matériel informatique et sécurité.pdf.*

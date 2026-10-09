@@ -31,4 +31,4 @@ Le binôme référent accompagne le nouvel arrivant : accès aux outils internes
 
 ---
 
-*Fichier source : 03-procedure-onboarding.md — NovaCorp, document interne, diffusion restreinte aux employés. Texte extrait du PDF de même nom (docs-rh/version_PDF/).*
+*Fichier source : 03-procedure-onboarding.md — NovaCorp, document interne, diffusion restreinte aux employés. Version mise en page : docs-rh/version_PDF/03 - NovaCorp — Procédure d'onboarding.pdf.*

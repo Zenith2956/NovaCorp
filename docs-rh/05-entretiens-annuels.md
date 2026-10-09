@@ -30,4 +30,4 @@ Chaque employé dispose d'un budget annuel de 1 200 € de formation, mobilisabl
 
 ---
 
-*Fichier source : 05-entretiens-annuels.md — NovaCorp, document interne, diffusion restreinte aux employés. Texte extrait du PDF de même nom (docs-rh/version_PDF/).*
+*Fichier source : 05-entretiens-annuels.md — NovaCorp, document interne, diffusion restreinte aux employés. Version mise en page : docs-rh/version_PDF/05 - NovaCorp — Entretiens annuels et professionnels.pdf.*

@@ -26,4 +26,4 @@ Les employés du siège disposent de 8 jours de RTT par an. Ils se posent comme 
 
 ---
 
-*Fichier source : 07-heures-sup-rtt.md — NovaCorp, document interne, diffusion restreinte aux employés. Texte extrait du PDF de même nom (docs-rh/version_PDF/).*
+*Fichier source : 07-heures-sup-rtt.md — NovaCorp, document interne, diffusion restreinte aux employés. Version mise en page : docs-rh/version_PDF/07 - NovaCorp — Heures supplémentaires et RTT.pdf.*

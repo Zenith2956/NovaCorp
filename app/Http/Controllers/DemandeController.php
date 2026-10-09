@@ -8,6 +8,7 @@ use App\Models\EtapeCircuit;
 use App\Models\PieceJointe;
 use App\Models\TypeDemande;
 use App\Models\User;
+use App\Services\AbsencesEquipe;
 use App\Services\WorkflowDemande;
 use App\Support\Calendrier;
 use Illuminate\Http\Request;
@@ -137,10 +138,12 @@ class DemandeController extends Controller
     public function show(Request $request, Demande $demande)
     {
         $this->autoriserLecture($request->user(), $demande);
-        $demande->load(['demandeur.role', 'manager', 'piecesJointes', 'traitePar', 'historique.auteur']);
+        $demande->load(['demandeur.role', 'manager', 'managerTitulaire', 'piecesJointes', 'traitePar', 'historique.auteur']);
 
         return view('demandes.show', [
             'demande' => $demande,
+            // A3 – collègues déjà absents (congé), pour le valideur seulement
+            'absencesEquipe' => $request->user()->id !== $demande->demandeur_id ? app(AbsencesEquipe::class)->pour($demande) : null,
             'etapes' => $this->workflow->etapes($demande),
             'applicables' => $this->workflow->etapesApplicables($demande)->pluck('ordre')->all(),
             'actions' => $this->workflow->actionsPossibles($request->user(), $demande),

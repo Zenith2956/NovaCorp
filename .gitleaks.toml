@@ -1,0 +1,34 @@
+# Configuration gitleaks (C2) : règles par défaut + exceptions propres au projet
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fichiers sans secret réel"
+paths = [
+  '''(^|/)vendor/''',
+  '''(^|/)node_modules/''',
+  '''composer\.lock$''',
+  '''package-lock\.json$''',
+  '''flutter_app/pubspec\.lock$''',
+  '''flutter_app/(android|ios|linux|macos|windows|web)/''',
+  '''\.phpunit\.result\.cache$''',
+]
+
+# Mot de passe en clair dans un .env / .env.example / un doc (cas réel du projet : mot de passe Supabase commité)
+[[rules]]
+id = "novacorp-mot-de-passe-env"
+description = "Mot de passe ou clé renseigné dans un fichier de configuration"
+regex = '''(?im)(?:^|[\s`])(DB_PASSWORD|MAIL_PASSWORD|REDIS_PASSWORD|RESEND_API_KEY|N8N_SECRET|OPENROUTER_API_KEY)[ \t]*=[ \t]*['"]?([^\s'"#`]{6,})'''
+secretGroup = 2
+[rules.allowlist]
+# valeurs d'exemple, variables d'environnement lues par le code, mot de passe de la base locale de développement
+regexes = ['''(?i)^(null|false|true|secret|password|changeme|novacorp|\$\{.*\}|<.*>|\[.*\]|x+)$''', '''^(Deno\.|env\(|process\.|config\()''']
+
+# Chaîne de connexion PostgreSQL contenant un mot de passe
+[[rules]]
+id = "novacorp-url-postgres"
+description = "URL PostgreSQL avec mot de passe"
+regex = '''postgres(?:ql)?://[^:\s/@]+:([^@\s]{6,})@'''
+secretGroup = 1
+[rules.allowlist]
+regexes = ['''(?i)^(\[.*\]|<.*>|\$\{.*\}|password|mot[-_]de[-_]passe|x+|\*+|\.\.\.)$''']

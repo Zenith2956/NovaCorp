@@ -1,0 +1,103 @@
+# C2 – Intégration continue NovaCorp
+# À chaque push et pull request : tests Laravel, analyse + tests Flutter, détection de secrets.
+# Une PR vers main ne peut être fusionnée que si tout est vert (à activer dans GitHub :
+# Settings > Branches > règle sur « main » > « Require status checks to pass »).
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Secrets (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Aucun fichier .env commité
+        run: |
+          if git ls-files | grep -E '(^|/)\.env(\.backup|\.production)?$'; then
+            echo "::error::Un fichier .env est suivi par Git : il contient les mots de passe, il ne doit jamais être commité."
+            exit 1
+          fi
+
+      - name: .env.example sans valeur sensible
+        run: |
+          # Les clés sensibles doivent rester vides (ou null) dans le modèle partagé
+          if grep -nE '^(APP_KEY|DB_PASSWORD|DB_URL|RESEND_API_KEY|N8N_SECRET|SUPABASE_[A-Z_]*KEY|AWS_SECRET_ACCESS_KEY|MAIL_PASSWORD)=.+' .env.example \
+             | grep -vE '=(null|"")$'; then
+            echo "::error::.env.example contient une valeur sensible : laisser ces clés vides."
+            exit 1
+          fi
+
+      - name: Installer gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks version
+
+      - name: Fichiers actuels
+        run: ./gitleaks dir . --config .gitleaks.toml --redact --no-banner
+
+      - name: Commits de la pull request
+        if: github.event_name == 'pull_request'
+        run: ./gitleaks git . --config .gitleaks.toml --redact --no-banner --log-opts="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+
+  laravel:
+    name: Tests Laravel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_sqlite, sqlite3, intl, zip
+          coverage: none
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: composer-${{ hashFiles('composer.lock') }}
+
+      - name: Dépendances
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Configuration de test
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: php artisan test
+        run: php artisan test
+
+  flutter:
+    name: Flutter (analyse + tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: flutter_app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos
+      - run: flutter test

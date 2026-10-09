@@ -12,7 +12,7 @@ class EmployeController extends Controller
     {
         $recherche = $request->string('q')->trim();
 
-        $employes = User::with(['role', 'manager'])
+        $employes = User::with(['role', 'manager', 'suppleant'])->withCount('equipe')
             ->when($recherche->isNotEmpty(), fn ($q) => $q->where(fn ($q) => $q
                 // whereLike = insensible à la casse (ILIKE sous PostgreSQL)
                 ->whereLike('nom', "%{$recherche}%")
@@ -26,6 +26,9 @@ class EmployeController extends Controller
         return view('employes.index', [
             'employes' => $employes,
             'roles' => Role::orderBy('libelle')->get(),
+            // A2 – la RH / l'admin choisissent le suppléant de chaque manager
+            'peutChoisirSuppleant' => $peut = $request->user()->hasRole('rh', 'admin'),
+            'candidats' => $peut ? User::where('actif', true)->orderBy('nom')->orderBy('prenom')->get(['id', 'nom', 'prenom']) : collect(),
         ]);
     }
 }

@@ -1,0 +1,3 @@
+# Fuite déjà traitée : mot de passe Supabase commité dans .env.example le 08/10/2026 (commit 67b5836),
+# mot de passe changé le jour même, fichier vidé. Ignorée pour que les scans complets de l'historique passent.
+67b58364e39dbece287c244af4f95c8013f70c65:.env.example:novacorp-mot-de-passe-env:31

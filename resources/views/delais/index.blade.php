@@ -95,4 +95,21 @@
     </form>
     @endif
 </div>
+
+<div class="card">
+    <h2>Alerte « équipe trop absente »</h2>
+    <p class="muted">Sur une demande de congé, le valideur voit les collègues déjà absents sur la période. L'alerte passe en rouge si, avec ce congé,
+        ce pourcentage de l'équipe (même manager) serait absent un même jour.</p>
+    @if ($peutRegler)
+        <form method="POST" action="{{ route('delais.parametres') }}" class="inline">
+            @csrf @method('PUT')
+            <label for="seuil" style="margin:0">Seuil</label>
+            <input id="seuil" type="number" min="10" max="100" name="seuil_absences_equipe_pct" value="{{ old('seuil_absences_equipe_pct', $seuilAbsences) }}" style="width:90px"> %
+            <button class="btn sec">Enregistrer</button>
+        </form>
+        @error('seuil_absences_equipe_pct')<div class="err">{{ $message }}</div>@enderror
+    @else
+        <p>Seuil actuel : <strong>{{ $seuilAbsences }} %</strong></p>
+    @endif
+</div>
 @endsection

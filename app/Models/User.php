@@ -17,7 +17,7 @@ class User extends Authenticatable
     use HasFactory, Notifiable;
 
     protected $fillable = [
-        'nom', 'prenom', 'email', 'telephone', 'role_id', 'manager_id', 'actif', 'password',
+        'nom', 'prenom', 'email', 'telephone', 'role_id', 'manager_id', 'suppleant_id', 'actif', 'password',
     ];
 
     protected $hidden = ['password', 'remember_token'];
@@ -44,6 +44,12 @@ class User extends Authenticatable
     public function manager(): BelongsTo
     {
         return $this->belongsTo(User::class, 'manager_id');
+    }
+
+    /** A2 – Remplaçant choisi pendant les congés (à défaut : le N+1, puis la direction). */
+    public function suppleant(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'suppleant_id');
     }
 
     public function equipe(): HasMany

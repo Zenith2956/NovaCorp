@@ -4,9 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Demande;
 use App\Models\User;
+use App\Services\AbsencesEquipe;
+use App\Services\BrouillonIa;
 use App\Services\WorkflowDemande;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Liens « Valider / Refuser / Demander un complément » des mails envoyés au valideur de l'étape en cours.
@@ -41,6 +45,7 @@ class DecisionController extends Controller
             'etape' => $this->workflow->etapeCourante($demande),
             'jeton' => $jeton,
             'choix' => array_key_exists((string) $choix, self::CHOIX) ? $choix : null,
+            'absencesEquipe' => app(AbsencesEquipe::class)->pour($demande),
         ]);
     }
 
@@ -65,6 +70,32 @@ class DecisionController extends Controller
         $message = $this->workflow->executer(self::CHOIX[$data['choix']], $demande, $valideur, $data['commentaire'] ?? null, 'mail');
 
         return view('decision.resultat', ['demande' => $demande->refresh()->load('demandeur'), 'erreur' => false, 'message' => $message]);
+    }
+
+    /** D3 – Brouillon IA depuis la page ouverte par le lien du mail (même autorisation que la décision). */
+    public function brouillonIa(Request $request, Demande $demande, string $jeton, BrouillonIa $brouillon)
+    {
+        $data = $request->validate([
+            'intention' => ['required', 'in:refuser,demander_complement'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        abort_unless($this->jetonValide($demande, $jeton), 403);
+        $parService = ($this->workflow->etapeCourante($demande)?->valideur ?? 'manager') !== 'manager';
+        abort_if($parService && ! Auth::check(), 401);
+        $valideur = $this->valideur($demande);
+        abort_unless($valideur && $this->workflow->peutDecider($valideur, $demande), 403);
+
+        if (! $brouillon->estConfigure()) {
+            return response()->json(['erreur' => "L'assistant IA n'est pas configuré (N8N_BROUILLON_URL / N8N_SECRET)."], 503);
+        }
+        try {
+            return response()->json(['texte' => $brouillon->rediger($demande, $valideur, $data['intention'], $data['notes'] ?? null)]);
+        } catch (Throwable $e) {
+            Log::warning('Brouillon IA indisponible', ['demande' => $demande->id, 'erreur' => $e->getMessage()]);
+
+            return response()->json(['erreur' => "L'assistant IA est indisponible pour le moment (n8n éteint ?). Rédigez le commentaire vous-même."], 503);
+        }
     }
 
     /** Étape « Manager » : le manager assigné. Étape d'un service : l'utilisateur connecté. */

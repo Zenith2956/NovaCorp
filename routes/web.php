@@ -6,10 +6,12 @@ use App\Http\Controllers\ConnexionLogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DecisionController;
 use App\Http\Controllers\DelaiController;
+use App\Http\Controllers\BrouillonIaController;
 use App\Http\Controllers\DemandeController;
 use App\Http\Controllers\EmployeController;
 use App\Http\Controllers\ProjetController;
 use App\Http\Controllers\StatistiqueController;
+use App\Http\Controllers\SuppleantController;
 use App\Http\Controllers\TacheController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,6 +23,7 @@ Route::middleware('throttle:20,1')->group(function () {
     Route::get('/taches/{tache}/fixer-deadline/{jeton}', [TacheController::class, 'formulaireJeton'])->name('taches.jeton');
     Route::post('/taches/{tache}/fixer-deadline/{jeton}', [TacheController::class, 'fixerParJeton'])->name('taches.jeton.store');
     Route::post('/decision/{demande}/{jeton}', [DecisionController::class, 'store'])->name('decision.store');
+    Route::post('/decision/{demande}/{jeton}/brouillon-ia', [DecisionController::class, 'brouillonIa'])->name('decision.brouillon-ia');
 });
 
 // --- Invités : connexion / inscription ---
@@ -42,9 +45,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/demandes', [DemandeController::class, 'store'])->name('demandes.store');
     Route::get('/demandes/{demande}', [DemandeController::class, 'show'])->name('demandes.show');
     Route::post('/demandes/{demande}/action', [DemandeController::class, 'action'])->name('demandes.action');
+    Route::post('/demandes/{demande}/brouillon-ia', BrouillonIaController::class)->middleware('throttle:10,1')->name('demandes.brouillon-ia');
     Route::get('/pieces-jointes/{pieceJointe}', [DemandeController::class, 'telechargerPieceJointe'])->name('pieces-jointes.download');
 
     Route::get('/employes', [EmployeController::class, 'index'])->name('employes.index');
+    Route::put('/mon-suppleant', SuppleantController::class)->name('suppleant.moi');
+    Route::put('/employes/{user}/suppleant', SuppleantController::class)->name('suppleant.employe');
     Route::get('/projets', [ProjetController::class, 'index'])->name('projets.index');
     Route::get('/projets/nouveau', [ProjetController::class, 'create'])->name('projets.create');
     Route::post('/projets', [ProjetController::class, 'store'])->name('projets.store');
@@ -66,6 +72,8 @@ Route::middleware('auth')->group(function () {
         ->middleware('role:rh,direction,admin,manager')->name('delais.index');
     Route::put('/delais/types', [DelaiController::class, 'updateTypes'])
         ->middleware('role:rh,admin')->name('delais.types');
+    Route::put('/delais/parametres', [DelaiController::class, 'updateParametres'])
+        ->middleware('role:rh,admin')->name('delais.parametres');
 
     Route::get('/statistiques', [StatistiqueController::class, 'index'])
         ->middleware('role:rh,direction,admin,manager')->name('statistiques.index');

@@ -10,6 +10,7 @@
         <p class="muted">Étape {{ $etape->ordre }} du circuit : <strong>{{ $etape->libelle }}</strong></p>
     @endif
     @include('demandes._details', ['demande' => $demande])
+    @include('demandes._absences_equipe', ['absencesEquipe' => $absencesEquipe ?? null])
     <p style="white-space:pre-line">{{ $demande->message }}</p>
     @if ($demande->piecesJointes->isNotEmpty())
         <p class="muted">{{ $demande->piecesJointes->count() }} pièce(s) jointe(s), visibles dans l'application.</p>
@@ -20,6 +21,7 @@
         <label for="commentaire">Commentaire <span class="muted" style="font-weight:normal">(obligatoire pour refuser ou demander un complément)</span></label>
         <textarea id="commentaire" name="commentaire" rows="3">{{ old('commentaire') }}</textarea>
         @error('commentaire')<div class="err">{{ $message }}</div>@enderror
+        @include('demandes._brouillon_ia', ['intentions' => ['demander_complement', 'refuser'], 'url' => route('decision.brouillon-ia', [$demande, $jeton])])
         <p class="inline" style="margin-top:1rem">
             <button class="btn" name="choix" value="validee" @if($choix && $choix !== 'validee') style="opacity:.6" @endif>Valider</button>
             <button class="btn sec" name="choix" value="a_completer" @if($choix && $choix !== 'a_completer') style="opacity:.6" @endif>Demander un complément</button>

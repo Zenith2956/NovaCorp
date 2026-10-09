@@ -36,3 +36,4 @@ table{width:100%;border-collapse:collapse;font-size:.93rem}th,td{text-align:left
 .circuit-etapes .e-faite{border-left-color:var(--ok)}.circuit-etapes .e-courante{border-left-color:var(--wait);background:#fff9f0}
 .circuit-etapes .e-refusee{border-left-color:var(--ko)}.circuit-etapes .e-sautee{opacity:.55}.circuit-etapes .e-a_venir{border-left-color:#cfd4dc}
 .alert.info{background:#fff9db;color:#e67700}
+.graphes{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:1rem;margin-top:1rem}.graphes .card{margin:0}

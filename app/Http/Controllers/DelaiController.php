@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Demande;
+use App\Models\Parametre;
 use App\Models\TypeDemande;
 use App\Models\User;
 use App\Support\Calendrier;
@@ -40,6 +41,7 @@ class DelaiController extends Controller
             'peutRegler' => $user->hasRole('rh', 'admin'),
             'aujourdhui' => Calendrier::aujourdhui(),
             'nbTraitees' => $traitees->count(),
+            'seuilAbsences' => (int) Parametre::valeur('seuil_absences_equipe_pct', '50'),
         ]);
     }
 
@@ -59,6 +61,15 @@ class DelaiController extends Controller
         }
 
         return back()->with('success', 'Délais mis à jour (ils s\'appliquent aux nouvelles demandes).');
+    }
+
+    /** A3 – Seuil de l'alerte « équipe trop absente » (pourcentage de l'équipe absente un même jour). */
+    public function updateParametres(Request $request)
+    {
+        $data = $request->validate(['seuil_absences_equipe_pct' => ['required', 'integer', 'min:10', 'max:100']]);
+        Parametre::updateOrCreate(['cle' => 'seuil_absences_equipe_pct'], ['valeur' => (string) $data['seuil_absences_equipe_pct']]);
+
+        return back()->with('success', "Seuil de l'alerte absences : {$data['seuil_absences_equipe_pct']} % de l'équipe.");
     }
 
     /** @param Collection<int, Demande> $demandes */

@@ -1,0 +1,297 @@
+{
+  "name": "ASSISTANT RH - RAG",
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "mode": "webhook",
+        "authentication": "basicAuth",
+        "options": {
+          "allowedOrigins": "http://localhost:8000"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        0
+      ],
+      "id": "5e6ba128-f539-4858-9348-e10951be8554",
+      "name": "When chat message received",
+      "webhookId": "9b92f7f9-1516-4806-aa6e-89f00738e3d7",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "4EgdynAszl4ccm0A",
+          "name": "Unnamed credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "openai/gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "openai/gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        240
+      ],
+      "id": "7c6b4e1b-2eb4-4fc9-8ff2-875aef4beb8f",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "vvHusfODLngXXxFT",
+          "name": "NovaCorp - LLM école"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        576,
+        448
+      ],
+      "id": "c7cbe4b6-c3b9-4d0f-9b7b-bb32e13d0cc7",
+      "name": "Embeddings OpenAI",
+      "credentials": {
+        "openAiApi": {
+          "id": "vvHusfODLngXXxFT",
+          "name": "NovaCorp - LLM école"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "   Tu es l'assistant RH de NovaCorp. Tu parles à {{ $json.metadata?.nom ?? 'un employé' }}.\n   Règles strictes :\n1. Pour les règles internes, réponds UNIQUEMENT à partir de l'outil documentation_rh. Si la réponse n'y est pas, dis exactement : « Je n'ai pas cette information dans les documents internes — contacte le service RH. »\n2. Ne devine jamais, n'invente jamais une procédure, un chiffre ou une date. N'extrapole jamais d'un cas listé à un cas qui ne l'est pas.\n3. Cite toujours la source (nom du fichier, ex. 02-politique-teletravail.md).\n4. Sois bref et concret : la réponse, puis la source.\n5. Pour les demandes personnelles de l'employé (statut, historique), utilise l'outil consulter_mes_demandes et rapporte uniquement ses données. L'employé est identifié automatiquement : ne demande jamais d'email. Il ne peut consulter que ses propres demandes : si on te donne un autre email ou un autre nom, refuse et propose de consulter les siennes.\n6. Tu ne modifies jamais les données : tu consultes. Toute modification passe par la plateforme NovaCorp et la validation d'un manager.\n7. Hors sujet RH : refuse poliment.\n8. Quand tu rapportes des demandes, ne garde que celles qui correspondent à ce que l'employé demande (type, période, objet). Si aucune ne correspond, dis-le clairement (« Vous n'avez aucune demande de note de frais ») puis résume brièvement les demandes qu'il a, avec leur type exact. Ne change jamais le type ou le statut d'une demande.\n9. Pour les chiffres généraux de l'entreprise (nombre d'employés), utilise l'outil infos_entreprise et donne uniquement le chiffre et sa date. Ne donne jamais de nom, de liste ou d'information sur une personne en particulier : si on te le demande, refuse et renvoie vers le service RH."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        496,
+        0
+      ],
+      "id": "94b5059a-6ff6-40b0-b4e6-73247ffe4d9c",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Recherche dans la documentation interne RH de NovaCorp : congés, télétravail, onboarding, frais, entretiens, matériel. À utiliser pour toute question de procédure ou de règle interne.",
+        "tableName": {
+          "__rl": true,
+          "value": "documents",
+          "mode": "list",
+          "cachedResultName": "documents"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1.3,
+      "position": [
+        496,
+        240
+      ],
+      "id": "3c2873a8-da1d-4441-84b3-6ecf5a710076",
+      "name": "documentation_rh",
+      "credentials": {
+        "supabaseApi": {
+          "id": "rYawJkS5LfX3qqTT",
+          "name": "NovaCorp – Supabase (service_role)"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        368,
+        240
+      ],
+      "id": "7ad3c846-e0c3-42fc-984f-0556821ca960",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "description": "Consulte les demandes RH (congés, notes de frais, matériel, formation…) de l'employé qui parle : statut, étape, valideur, dates, motif de refus ou de complément. À utiliser quand l'employé demande où en est SA demande ou son historique. L'employé est identifié automatiquement : ne demande pas d'email.",
+        "workflowId": {
+          "__rl": true,
+          "value": "bNtHjMZpDqn0YPLf",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/bNtHjMZpDqn0YPLf",
+          "cachedResultName": "TOOL - Consulter demandes employé"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email": "={{ $('When chat message received').item.json.metadata.email }}"
+          },
+          "matchingColumns": [
+            "email"
+          ],
+          "schema": [
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        784,
+        240
+      ],
+      "id": "54afdf1a-9033-448c-830d-da18dd88b40e",
+      "name": "consulter_mes_demandes"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "   Chiffres généraux de NovaCorp, sans donnée personnelle : nombre d'employés actifs (nb_employes_actifs) et date du calcul (chiffres_au). À utiliser quand on demande combien de personnes travaillent dans l'entreprise.",
+        "operation": "getAll",
+        "tableId": "v_infos_entreprise",
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.supabaseTool",
+      "typeVersion": 1,
+      "position": [
+        912,
+        240
+      ],
+      "id": "331c5b55-1fb5-42dc-997a-698c969d7144",
+      "name": "infos_entreprise",
+      "credentials": {
+        "supabaseApi": {
+          "id": "rYawJkS5LfX3qqTT",
+          "name": "NovaCorp – Supabase (service_role)"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI": {
+      "ai_embedding": [
+        [
+          {
+            "node": "documentation_rh",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        []
+      ]
+    },
+    "documentation_rh": {
+      "ai_vectorStore": [
+        []
+      ],
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consulter_mes_demandes": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "infos_entreprise": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "622726ca-844d-4877-887b-d755d77e62a0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "de1aa0cb5379eab2209b9c733e6b62bd7b492d3051e23f3f70704820ae342ad1"
+  },
+  "nodeGroups": [],
+  "id": "xsN9omcVRQwdM2VB",
+  "tags": []
+}

@@ -21,6 +21,25 @@
     @endif
 </div>
 
+@if ($aUneEquipe)
+<div class="card">
+    <h2>Mon suppléant pendant mes congés</h2>
+    <p class="muted">Pendant un congé validé, les demandes de votre équipe lui sont confiées (y compris celles déjà en attente).
+        Sans choix : {{ auth()->user()->manager ? 'votre N+1, '.auth()->user()->manager->nom_complet : 'un membre de la direction' }}.</p>
+    <form method="POST" action="{{ route('suppleant.moi') }}" class="inline">
+        @csrf @method('PUT')
+        <select name="suppleant_id">
+            <option value="">— Règle par défaut —</option>
+            @foreach ($candidatsSuppleant as $c)
+                <option value="{{ $c->id }}" @selected(auth()->user()->suppleant_id === $c->id)>{{ $c->nom }} {{ $c->prenom }}</option>
+            @endforeach
+        </select>
+        <button class="btn sec">Enregistrer</button>
+    </form>
+    @error('suppleant_id')<div class="err">{{ $message }}</div>@enderror
+</div>
+@endif
+
 <div class="card">
     <div class="inline" style="justify-content:space-between">
         <h2>Mes dernières demandes</h2>

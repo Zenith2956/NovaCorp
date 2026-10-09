@@ -28,6 +28,11 @@ class DashboardController extends Controller
                 ->whereDate('echeance_le', '<', Calendrier::aujourdhui()->toDateString())->count(),
             'caDouzeMois' => ChiffreAffaire::where('periode', '>=', now()->startOfMonth()->subMonths(11))->sum('montant'),
             'dernieresDemandes' => $user->demandes()->with('manager')->latest()->take(5)->get(),
+            // A2 – carte « Mon suppléant » pour les managers
+            'aUneEquipe' => $aUneEquipe = $user->equipe()->exists(),
+            'candidatsSuppleant' => $aUneEquipe
+                ? User::where('actif', true)->whereKeyNot($user->id)->orderBy('nom')->orderBy('prenom')->get(['id', 'nom', 'prenom'])
+                : collect(),
         ]);
     }
 }

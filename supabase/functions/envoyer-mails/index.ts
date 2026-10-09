@@ -1,4 +1,4 @@
-// Edge Function « envoyer-mails » – NovaCorp (version 4 : demandes + tâches + délais + workflow)
+// Edge Function « envoyer-mails » – NovaCorp (version 9 : demandes + tâches + délais + workflow + récapitulatif + bienvenue + résumé et tri IA + bilan de santé + relances des oublis + délégation et absences d'équipe)
 // Envoie les mails en attente de la table public.mails_sortants via l'API Resend.
 // Appelée chaque minute par pg_cron ; peut aussi être appelée à la main : select automation.appeler_envoyer_mails();
 //
@@ -13,7 +13,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { encodeBase64 } from 'jsr:@std/encoding@1/base64'
 
 // NOVACORP_DB_URL (facultatif) : chaîne de connexion à jour si SUPABASE_DB_URL garde un ancien mot de passe
-const sql = postgres((Deno.env.get('NOVACORP_DB_URL') || Deno.env.get('SUPABASE_DB_URL'))!, { max: 3, prepare: false })
+const sql = postgres((Deno.env.get('NOVACORP_DB_URL') || Deno.env.get('SUPABASE_DB_URL'))!, { max: 3, prepare: false, idle_timeout: 10 }) // connexions libérées après 10 s d'inactivité
 const storage = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -32,7 +32,7 @@ const TYPES_DEMANDE: Record<string, string> = {
 }
 
 type MailSortant = {
-  id: number; demande_id: number | null; tache_id: number | null; type: string
+  id: number; demande_id: number | null; tache_id: number | null; projet_id: number | null; user_id: number | null; type: string
   destinataires: string[]; copies: string[] | null; donnees: Record<string, unknown> | null; tentatives: number
 }
 type Contenu = { sujet: string; html: string; replyTo?: string; attachments?: { filename: string; content: string }[] }
@@ -58,13 +58,17 @@ Deno.serve(async (req) => {
         where statut = 'a_envoyer' and (prochain_essai_at is null or prochain_essai_at <= now())
         order by id limit ${LOT}
         for update skip locked)
-    returning m.id, m.demande_id, m.tache_id, m.type, m.destinataires, m.copies, m.donnees, m.tentatives`
+    returning m.id, m.demande_id, m.tache_id, m.projet_id, m.user_id, m.type, m.destinataires, m.copies, m.donnees, m.tentatives`
 
   const bilan = { envoyes: 0, echecs: 0, annules: 0 }
 
   for (const mail of lot) {
     try {
-      const contenu = mail.tache_id ? await mailTache(mail) : await mailDemande(mail)
+      const contenu = mail.type === 'bilan_sante' ? mailBilan(mail)
+        : mail.projet_id ? await mailRecap(mail)
+        : mail.user_id ? await mailBienvenue(mail)
+        : mail.tache_id ? await mailTache(mail)
+        : await mailDemande(mail)
       await envoyer(mail, contenu)
       bilan.envoyes++
     } catch (e) {
@@ -133,9 +137,10 @@ async function mailDemande(mail: MailSortant): Promise<Contenu> {
   const [d] = await sql`
     select d.id, d.type, d.objet, d.message, d.statut, d.etape, d.jeton_decision, d.created_at, d.envoyee_at,
            d.urgente, d.date_souhaitee, d.echeance_le, d.deadline, d.commentaire_decision,
-           d.montant, d.date_debut, d.date_fin, d.nb_jours_ouvres,
+           d.montant, d.date_debut, d.date_fin, d.nb_jours_ouvres, d.resume_ia, d.analyse_ia,
            e.prenom as e_prenom, e.nom as e_nom, e.email as e_email, e.telephone as e_tel,
            m.prenom as m_prenom, m.nom as m_nom, m.email as m_email, m.telephone as m_tel,
+           mt.prenom as mt_prenom, mt.nom as mt_nom,
            dp.prenom as dp_prenom, dp.nom as dp_nom,
            tp.prenom as tp_prenom, tp.nom as tp_nom,
            ec.libelle as etape_libelle, coalesce(ec.valideur, 'manager') as valideur,
@@ -145,6 +150,7 @@ async function mailDemande(mail: MailSortant): Promise<Contenu> {
       from public.demandes d
       join public.users e on e.id = d.demandeur_id
       left join public.users m on m.id = d.manager_id
+      left join public.users mt on mt.id = d.manager_titulaire_id
       left join public.users dp on dp.id = d.decision_par
       left join public.users tp on tp.id = d.traite_par
       left join public.etapes_circuit ec on ec.type_code = d.type and ec.ordre = d.etape
@@ -158,13 +164,15 @@ async function mailDemande(mail: MailSortant): Promise<Contenu> {
   const etapeDuMail = don.etape !== undefined && don.etape !== null ? Number(don.etape) : null
 
   // Mails devenus inutiles entre leur création et leur envoi
-  const pourLeValideur = ['relance', 'rappel_echeance', 'escalade', 'etape_suivante', 'complement_recu']
+  const pourLeValideur = ['relance', 'rappel_echeance', 'escalade', 'etape_suivante', 'complement_recu', 'delegation']
   if (pourLeValideur.includes(mail.type)) {
     if (d.statut !== 'en_attente') throw new Annule('demande déjà traitée')
     if (etapeDuMail !== null && etapeDuMail !== Number(d.etape)) throw new Annule("la demande a changé d'étape")
   }
   if (mail.type === 'a_completer' && d.statut !== 'a_completer') throw new Annule('demande déjà complétée ou close')
-  if (mail.type === 'a_traiter' && d.statut !== 'validee') throw new Annule('demande déjà prise en charge ou corrigée')
+  if (['a_traiter', 'relance_a_traiter', 'escalade_a_traiter'].includes(mail.type) && d.statut !== 'validee') {
+    throw new Annule('demande déjà prise en charge ou corrigée')
+  }
 
   const typeLib = TYPES_DEMANDE[d.type] ?? d.type
   const employe = `${esc(d.e_prenom)} ${esc(d.e_nom)}`
@@ -191,7 +199,20 @@ async function mailDemande(mail: MailSortant): Promise<Contenu> {
     d.montant !== null ? `<strong>Montant :</strong> ${euros(d.montant)}` : '',
     d.date_debut ? `<strong>Congé :</strong> du ${dateFr(d.date_debut)} au ${dateFr(d.date_fin)} (${d.nb_jours_ouvres} jour(s) ouvré(s))` : '',
   ].filter(Boolean).join('<br>')
-  const resume = `
+  // Résumé (D2) et points d'attention (D1) proposés par l'IA – rien n'est décidé automatiquement
+  const analyse = (d.analyse_ia ?? {}) as { points_attention?: unknown; urgence_suggeree?: unknown; type_suggere?: unknown }
+  const points = [
+    !d.urgente && analyse.urgence_suggeree === true ? "Semble urgente, alors qu'elle n'est pas marquée comme telle." : '',
+    typeof analyse.type_suggere === 'string' && analyse.type_suggere !== d.type && TYPES_DEMANDE[analyse.type_suggere]
+      ? `Le type « ${TYPES_DEMANDE[analyse.type_suggere]} » semblerait plus adapté.` : '',
+    ...(Array.isArray(analyse.points_attention) ? analyse.points_attention.filter((p) => typeof p === 'string').slice(0, 5) : []),
+  ].filter(Boolean) as string[]
+  const enBref = d.resume_ia
+    ? `<div style="padding:10px 12px;background:#f3f0ff;border-left:4px solid #6741d9;margin:12px 0"><strong>En bref</strong> <span style="color:#667085;font-size:12px">(résumé automatique par IA)</span> : ${esc(d.resume_ia)}${points.length
+        ? `<div style="margin-top:6px"><strong>Points d'attention</strong> <span style="color:#667085;font-size:12px">(suggestions de l'IA, à vérifier)</span> :</div><ul style="margin:4px 0 0;padding-left:20px">${points.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`
+        : ''}</div>`
+    : ''
+  const resume = `${enBref}
     <p><strong>Objet :</strong> ${esc(d.objet)}<br><strong>Type :</strong> ${typeLib}${details ? '<br>' + details : ''}</p>
     <div style="padding:12px;background:#f4f6fb;border-left:4px solid #3b5bdb;white-space:pre-line">${esc(d.message)}</div>`
   const commentaire = (titre: string, texte: unknown, couleur = '#c92a2a') => texte
@@ -200,6 +221,13 @@ async function mailDemande(mail: MailSortant): Promise<Contenu> {
   const lienFiche = (texte: string) => `<p>${lienTexte(`${APP_URL}/demandes/${d.id}`, texte)}</p>`
   const pied = `<p style="color:#667085;font-size:12px;margin-top:24px">Demande #${d.id} – NovaCorp · ${employe} · ${esc(d.e_email)}${d.e_tel ? ' · ' + esc(d.e_tel) : ''}</p>`
   const envoyeeLe = dateFr(d.envoyee_at ?? d.created_at)
+  // A2 – demande confiée au suppléant pendant l'absence du manager titulaire
+  const titulaire = d.mt_prenom ? `${esc(d.mt_prenom)} ${esc(d.mt_nom)}` : ''
+  const suppleance = titulaire
+    ? `<p style="padding:8px 12px;background:#e7f5ff;border-left:4px solid #1c7ed6">Vous recevez cette demande en tant que <strong>suppléant(e) de ${titulaire}</strong>, absent(e).</p>`
+    : ''
+  // A3 – collègues déjà absents sur la période d'un congé
+  const absences = d.type === 'conge' && ['nouvelle_demande', 'etape_suivante', 'delegation'].includes(mail.type) ? await blocAbsences(d.id) : ''
 
   switch (mail.type) {
     case 'nouvelle_demande': {
@@ -210,8 +238,8 @@ async function mailDemande(mail: MailSortant): Promise<Contenu> {
         replyTo: d.e_email,
         attachments,
         html: page(`<p>Bonjour ${esc(d.m_prenom ?? '')},</p>
-          <p><strong>${employe}</strong> vous adresse une demande${d.urgente ? ' <strong style="color:#c2255c">urgente</strong>' : ''}.</p>
-          ${resume}${etapeTexte}${delais}${pjs.length ? `<p>${pjs.length} pièce(s) jointe(s).</p>` : ''}${liens}${boutons}${pied}`),
+          ${suppleance}<p><strong>${employe}</strong> vous adresse une demande${d.urgente ? ' <strong style="color:#c2255c">urgente</strong>' : ''}.</p>
+          ${resume}${absences}${etapeTexte}${delais}${pjs.length ? `<p>${pjs.length} pièce(s) jointe(s).</p>` : ''}${liens}${boutons}${pied}`),
       }
     }
     case 'etape_suivante': {
@@ -224,7 +252,7 @@ async function mailDemande(mail: MailSortant): Promise<Contenu> {
         html: page(`${bonjourValideur}
           <p>La demande de <strong>${employe}</strong> a été validée par son manager, ${manager}.
           Elle attend maintenant la validation ${parService ? `du service <strong>${service}</strong>` : 'de votre part'}.</p>
-          ${resume}${etapeTexte}${delais}${pjs.length ? `<p>${pjs.length} pièce(s) jointe(s).</p>` : ''}${liens}${boutons}${pied}`),
+          ${resume}${absences}${etapeTexte}${delais}${pjs.length ? `<p>${pjs.length} pièce(s) jointe(s).</p>` : ''}${liens}${boutons}${pied}`),
       }
     }
     case 'decision': {
@@ -250,6 +278,46 @@ async function mailDemande(mail: MailSortant): Promise<Contenu> {
           ${resume}
           <p style="margin:24px 0">${bouton(`${APP_URL}/demandes/${d.id}`, 'Prendre en charge dans NovaCorp', '#3b5bdb')}</p>
           <p style="color:#667085;font-size:13px">Ce mail est envoyé à tout le service : la première personne qui prend la demande en charge s'en occupe.</p>${pied}`),
+      }
+    case 'delegation': {
+      const pjs = await sql`select nom_original, chemin, taille from public.pieces_jointes where demande_id = ${d.id} order by id`
+      const { attachments, liens } = await piecesJointes(pjs)
+      return {
+        sujet: `[NovaCorp] ${urgent}En l'absence de ${d.mt_prenom ?? ''} ${d.mt_nom ?? ''} – demande #${d.id} : ${d.objet}`,
+        replyTo: d.e_email,
+        attachments,
+        html: page(`<p>Bonjour ${esc(d.m_prenom ?? '')},</p>
+          <p>${titulaire} est absent(e) : en tant que <strong>suppléant(e)</strong>, vous décidez à sa place sur la demande de
+          <strong>${employe}</strong>, envoyée le ${envoyeeLe}.</p>
+          ${resume}${absences}${etapeTexte}${delais}${pjs.length ? `<p>${pjs.length} pièce(s) jointe(s).</p>` : ''}${liens}${boutons}${pied}`),
+      }
+    }
+    case 'delegation_info':
+      return {
+        sujet: `[NovaCorp] Votre demande #${d.id} est confiée à ${d.m_prenom} ${d.m_nom} pendant l'absence de ${d.mt_prenom ?? ''} ${d.mt_nom ?? ''}`,
+        html: page(`<p>Bonjour ${esc(d.e_prenom)},</p>
+          <p>${titulaire} est absent(e). Pour ne pas retarder votre demande <strong>« ${esc(d.objet)} »</strong>, elle est confiée à
+          son/sa suppléant(e), <strong>${manager}</strong>, qui décidera à sa place. Vous n'avez rien à faire.</p>
+          ${lienFiche('Voir la demande dans NovaCorp')}${pied}`),
+      }
+    case 'relance_a_traiter':
+      return {
+        sujet: `[NovaCorp] Relance – demande #${d.id} validée, toujours à prendre en charge : ${typeLib}, ${d.objet}`,
+        replyTo: d.e_email,
+        html: page(`<p>Bonjour,</p>
+          <p>La demande de <strong>${employe}</strong> a été validée le ${dateFr(String(don.depuis))} par ${decideur},
+          mais personne du service <strong>${esc(d.service_traitement ?? '')}</strong> ne l'a encore prise en charge.</p>
+          ${resume}
+          <p style="margin:24px 0">${bouton(`${APP_URL}/demandes/${d.id}`, 'Prendre en charge dans NovaCorp', '#3b5bdb')}</p>
+          <p style="color:#667085;font-size:13px">Sans prise en charge, la direction sera prévenue dans 3 jours ouvrés.</p>${pied}`),
+      }
+    case 'escalade_a_traiter':
+      return {
+        sujet: `[NovaCorp] Escalade – demande #${d.id} validée mais non traitée depuis le ${dateFr(String(don.depuis))}`,
+        html: page(`<p>Bonjour,</p>
+          <p>La demande de <strong>${employe}</strong> a été validée le ${dateFr(String(don.depuis))} par ${decideur}.
+          Malgré une relance, le service <strong>${esc(d.service_traitement ?? '')}</strong> (en copie) ne l'a toujours pas prise en charge.</p>
+          ${resume}${lienFiche('Voir la demande dans NovaCorp')}${pied}`),
       }
     case 'a_completer':
       return {
@@ -324,6 +392,23 @@ async function mailDemande(mail: MailSortant): Promise<Contenu> {
   }
 }
 
+/** A3 – « 2 / 5 personnes absentes » sur la période d'un congé (rouge si le seuil RH est atteint). */
+async function blocAbsences(demandeId: number): Promise<string> {
+  const [{ a }] = await sql`select automation.absences_equipe(${demandeId}) as a`
+  if (!a) return ''
+  const absents = (a.absents ?? []) as { nom: string; debut: string; fin: string; statut: string }[]
+  if (!absents.length) {
+    return `<p style="font-size:14px;color:#2b8a3e"><strong>Équipe :</strong> aucun autre congé sur cette période (${a.taille_equipe} personnes).</p>`
+  }
+  const couleur = a.alerte ? '#c92a2a' : '#1c7ed6'
+  return `<div style="padding:10px 12px;margin:12px 0;border-left:4px solid ${couleur};background:${a.alerte ? '#fff5f5' : '#e7f5ff'}">
+      <strong style="color:${couleur}">${a.alerte ? '⚠ Équipe très absente' : 'Équipe'} sur cette période :</strong>
+      avec ce congé, jusqu'à <strong>${a.max_simultanes} / ${a.taille_equipe}</strong> personnes absentes${a.jour_max ? ` le ${dateFr(String(a.jour_max))}` : ''}
+      (${a.pct} %${a.alerte ? `, seuil de ${a.seuil} % atteint` : ''}).
+      <ul style="margin:4px 0 0;padding-left:20px">${absents.map((x) =>
+        `<li>${esc(x.nom)} : du ${dateFr(String(x.debut))} au ${dateFr(String(x.fin))}${x.statut === 'en_attente' ? ' <span style="color:#667085">(demande en attente)</span>' : ''}</li>`).join('')}</ul></div>`
+}
+
 /** Qui a demandé le complément : le service de l'étape, ou le manager. */
 function decideurAction(d: Record<string, any>): string {
   return d.valideur !== 'manager'
@@ -362,7 +447,9 @@ async function mailTache(mail: MailSortant): Promise<Contenu> {
   if (mail.type === 'tache_expiration' && t.statut !== 'expiree') {
     throw new Annule('tâche réactivée (deadline repoussée)')
   }
-  if (mail.type === 'tache_a_valider' && t.statut !== 'a_valider') throw new Annule('tâche déjà validée ou renvoyée')
+  if (['tache_a_valider', 'tache_relance_validation', 'tache_escalade_validation'].includes(mail.type) && t.statut !== 'a_valider') {
+    throw new Annule('tâche déjà validée ou renvoyée')
+  }
 
   const responsable = `${esc(t.r_prenom)} ${esc(t.r_nom)}`
   const chef = `${esc(t.c_prenom ?? '')} ${esc(t.c_nom ?? '')}`
@@ -445,6 +532,22 @@ async function mailTache(mail: MailSortant): Promise<Contenu> {
           En tant que chef de projet, validez-la ou renvoyez-la avec un commentaire.</p>
           ${resume}<p style="margin:24px 0">${bouton(`${APP_URL}/taches/${t.id}`, 'Valider ou renvoyer dans NovaCorp', '#6741d9')}</p>${pied}`),
       }
+    case 'tache_relance_validation':
+      return {
+        sujet: `[NovaCorp] Relance – tâche à valider depuis le ${dateFr(String(don.depuis))} : ${t.titre} (${t.projet})`,
+        html: page(`<p>Bonjour ${esc(t.c_prenom ?? '')},</p>
+          <p><strong>${responsable}</strong> a terminé sa tâche le ${dateFr(String(don.depuis))} : elle attend toujours votre validation.</p>
+          ${resume}<p style="margin:24px 0">${bouton(`${APP_URL}/taches/${t.id}`, 'Valider ou renvoyer dans NovaCorp', '#6741d9')}</p>
+          <p style="color:#667085;font-size:13px">Sans réponse, votre responsable sera prévenu dans 3 jours ouvrés.</p>${pied}`),
+      }
+    case 'tache_escalade_validation':
+      return {
+        sujet: `[NovaCorp] Escalade – tâche en attente de validation depuis le ${dateFr(String(don.depuis))} : ${t.titre} (${t.projet})`,
+        html: page(`<p>Bonjour,</p>
+          <p>La tâche de <strong>${responsable}</strong> (projet ${esc(t.projet ?? '')}) est terminée depuis le ${dateFr(String(don.depuis))}
+          et attend, malgré une relance, la validation de son chef de projet <strong>${chef}</strong> (en copie).</p>
+          ${resume}<p>${lienTache}</p>${pied}`),
+      }
     case 'tache_renvoyee':
       return {
         sujet: `[NovaCorp] Tâche renvoyée par le chef de projet – ${t.titre}`,
@@ -463,6 +566,136 @@ async function mailTache(mail: MailSortant): Promise<Contenu> {
       }
     default:
       throw new Error(`type de mail inconnu : ${mail.type}`)
+  }
+}
+
+// =====================================================================
+// S4 – Récapitulatif du projet (jour de réunion, 8 h) et S5 – Bienvenue
+// =====================================================================
+async function mailRecap(mail: MailSortant): Promise<Contenu> {
+  const [p] = await sql`
+    select p.id, p.nom, p.statut, p.reunion_frequence, p.chef_projet_id, c.prenom as c_prenom, c.nom as c_nom
+      from public.projets p left join public.users c on c.id = p.chef_projet_id
+     where p.id = ${mail.projet_id}`
+  if (!p) throw new Error(`projet ${mail.projet_id} introuvable`)
+  if (p.statut !== 'en_cours') throw new Annule('projet plus en cours')
+
+  const don = mail.donnees ?? {}
+  const depuis = String(don.depuis)
+  const chef = don.role === 'chef'
+  const aujourdhui = String(don.date)
+
+  const taches = await sql`
+    select t.titre, t.statut, t.deadline, t.termine_at, t.nb_reports, r.prenom || ' ' || r.nom as responsable
+      from public.taches t join public.users r on r.id = t.responsable_id
+     where t.projet_id = ${p.id}
+     order by t.deadline nulls first, t.id`
+  const iso = (d: unknown) => (d ? isoDate(d as Date | string) : '')
+  const terminees = taches.filter((t) => t.statut === 'terminee')
+  const termineesPeriode = terminees.filter((t) => t.termine_at && iso(t.termine_at) >= depuis)
+  const aValider = taches.filter((t) => t.statut === 'a_valider')
+  const enRetard = taches.filter((t) => t.statut === 'expiree' || (['a_faire', 'en_cours'].includes(t.statut) && t.deadline && iso(t.deadline) < aujourdhui))
+  const sansDeadline = taches.filter((t) => ['a_faire', 'en_cours'].includes(t.statut) && !t.deadline)
+  const aVenir = taches.filter((t) => ['a_faire', 'en_cours'].includes(t.statut) && t.deadline && iso(t.deadline) >= aujourdhui).slice(0, 10)
+  const reports = taches.reduce((s, t) => s + Number(t.nb_reports ?? 0), 0)
+  const avancement = taches.length ? Math.round((100 * terminees.length) / taches.length) : 0
+
+  const liste = (titre: string, lignes: string[], vide: string) => `
+    <h3 style="font-size:15px;margin:20px 0 6px">${titre}</h3>
+    ${lignes.length ? `<ul style="margin:0;padding-left:20px">${lignes.join('')}</ul>` : `<p style="color:#667085;margin:0">${vide}</p>`}`
+  const ligneTache = (t: Record<string, any>, extra = '') =>
+    `<li>${esc(t.titre)} – ${esc(t.responsable)}${t.deadline ? ` · deadline ${dateFr(t.deadline)}` : ''}${extra}</li>`
+
+  const chiffres = `
+    <table style="border-collapse:collapse;margin:12px 0"><tr>
+      ${[['Avancement', `${avancement} %`], ['Tâches', `${terminees.length} / ${taches.length} terminées`],
+         ['Terminées depuis la dernière réunion', String(termineesPeriode.length)], ['En retard', String(enRetard.length)],
+         ['Reports de deadline', String(reports)]]
+        .map(([l, v]) => `<td style="padding:8px 14px;border:1px solid #e4e7ec"><div style="font-size:18px;font-weight:bold">${v}</div><div style="font-size:12px;color:#667085">${l}</div></td>`).join('')}
+    </tr></table>`
+
+  let demandes = ''
+  if (chef) {
+    const [d] = await sql`
+      select count(*) filter (where automation.date_paris(created_at) >= ${depuis}::date) as recues,
+             count(*) filter (where decision_at is not null and automation.date_paris(decision_at) >= ${depuis}::date and statut <> 'refusee') as approuvees,
+             count(*) filter (where decision_at is not null and automation.date_paris(decision_at) >= ${depuis}::date and statut = 'refusee') as refusees,
+             count(*) filter (where statut = 'en_attente') as en_attente,
+             count(*) filter (where statut = 'en_attente' and echeance_le < ${aujourdhui}::date) as en_retard
+        from public.demandes where manager_id = ${p.chef_projet_id}`
+    const attente = await sql`
+      select d.id, d.objet, d.type, d.echeance_le, e.prenom || ' ' || e.nom as employe
+        from public.demandes d join public.users e on e.id = d.demandeur_id
+       where d.manager_id = ${p.chef_projet_id} and d.statut = 'en_attente'
+       order by d.echeance_le limit 10`
+    demandes = `
+      <h3 style="font-size:15px;margin:24px 0 6px">Demandes de votre équipe depuis le ${dateFr(depuis)}</h3>
+      <p style="margin:0">${d.recues} reçue(s) · ${d.approuvees} approuvée(s) · ${d.refusees} refusée(s) ·
+         <strong>${d.en_attente} en attente</strong>${Number(d.en_retard) ? ` dont <strong style="color:#c92a2a">${d.en_retard} en retard</strong>` : ''}</p>
+      ${attente.length ? `<ul style="margin:6px 0 0;padding-left:20px">${attente.map((a) =>
+        `<li><a href="${APP_URL}/demandes/${a.id}">${esc(a.objet)}</a> – ${esc(a.employe)} (${TYPES_DEMANDE[a.type] ?? a.type}) · échéance ${dateFr(a.echeance_le)}</li>`).join('')}</ul>` : ''}`
+  }
+
+  return {
+    sujet: `[NovaCorp] Réunion du ${dateFr(aujourdhui)} – récapitulatif du projet ${p.nom}`,
+    html: page(`<p>Bonjour${chef ? ' ' + esc(p.c_prenom ?? '') : ''},</p>
+      <p>Voici le point du projet <strong>${esc(p.nom)}</strong> depuis la réunion précédente (${dateFr(depuis)}), pour la réunion d'aujourd'hui.</p>
+      ${chiffres}
+      ${liste('Terminées depuis la dernière réunion', termineesPeriode.map((t) => ligneTache(t)), 'Aucune.')}
+      ${liste('À valider par le chef de projet', aValider.map((t) => ligneTache(t)), 'Aucune.')}
+      ${liste('En retard', enRetard.map((t) => ligneTache(t, t.statut === 'expiree' ? ' · <strong>expirée</strong>' : '')), 'Aucune, bravo.')}
+      ${liste('Prochaines deadlines', aVenir.map((t) => ligneTache(t)), 'Aucune.')}
+      ${sansDeadline.length ? liste('Deadline à fixer', sansDeadline.map((t) => ligneTache(t)), '') : ''}
+      ${demandes}
+      <p style="margin-top:24px">${lienTexte(`${APP_URL}/projets/${p.id}`, 'Ouvrir le projet dans NovaCorp')}</p>
+      <p style="color:#667085;font-size:12px;margin-top:24px">Récapitulatif automatique envoyé le jour de la réunion du projet${chef ? ' (version chef de projet, avec les demandes de votre équipe)' : ''} – NovaCorp</p>`),
+  }
+}
+
+async function mailBienvenue(mail: MailSortant): Promise<Contenu> {
+  const [u] = await sql`
+    select u.prenom, u.nom, u.email, u.actif, r.libelle as role, m.prenom as m_prenom, m.nom as m_nom
+      from public.users u left join public.roles r on r.id = u.role_id left join public.users m on m.id = u.manager_id
+     where u.id = ${mail.user_id}`
+  if (!u) throw new Error(`utilisateur ${mail.user_id} introuvable`)
+  if (!u.actif) throw new Annule('compte désactivé')
+  const delais = await sql`select libelle, delai_escalade from public.types_demande order by libelle`
+  const manager = u.m_prenom ? `${esc(u.m_prenom)} ${esc(u.m_nom)}` : null
+  const etapes = [
+    `Connectez-vous à ${lienTexte(`${APP_URL}/connexion`, 'NovaCorp')} avec votre adresse ${esc(u.email)} et vérifiez vos informations (téléphone).`,
+    manager ? `Rencontrez votre manager, <strong>${manager}</strong> (en copie de ce mail).` : 'Présentez-vous à votre responsable.',
+    `Consultez vos ${lienTexte(`${APP_URL}/taches`, 'tâches')} et les ${lienTexte(`${APP_URL}/projets`, 'projets')} auxquels vous participez.`,
+    `Besoin de matériel ? Faites une ${lienTexte(`${APP_URL}/demandes/nouvelle`, 'demande')} : elle est envoyée automatiquement à votre manager.`,
+    'Posez vos congés prévus via une demande de type « Congé », le plus tôt possible.',
+    `Délais de réponse aux demandes : ${delais.map((d) => `${esc(d.libelle)} ${d.delai_escalade} j ouvrés`).join(', ')}.`,
+  ]
+  return {
+    sujet: `[NovaCorp] Bienvenue ${u.prenom} ! Votre checklist du premier jour`,
+    html: page(`<p>Bonjour ${esc(u.prenom)},</p>
+      <p>Bienvenue chez NovaCorp${u.role ? ` en tant que <strong>${esc(u.role)}</strong>` : ''} ! Voici votre checklist du premier jour :</p>
+      <ol style="line-height:1.8">${etapes.map((e) => `<li>☐ ${e}</li>`).join('')}</ol>
+      <p style="margin:24px 0">${bouton(`${APP_URL}/connexion`, 'Ouvrir NovaCorp', '#3b5bdb')}</p>
+      ${manager ? `<p style="color:#667085;font-size:13px">${manager}, vous êtes en copie : pensez à accueillir ${esc(u.prenom)} et à lui présenter l'équipe et ses projets.</p>` : ''}
+      <p style="color:#667085;font-size:12px;margin-top:24px">Mail automatique envoyé à la création du compte – NovaCorp</p>`),
+  }
+}
+
+// =====================================================================
+// C1 – Bilan de santé (envoyé aux admins seulement s'il y a une alerte)
+// =====================================================================
+function mailBilan(mail: MailSortant): Contenu {
+  const don = mail.donnees ?? {}
+  const problemes = (Array.isArray(don.problemes) ? don.problemes : []) as { niveau: string; titre: string; detail?: string }[]
+  const alertes = problemes.filter((p) => p.niveau === 'alerte')
+  const ligne = (p: { niveau: string; titre: string; detail?: string }) =>
+    `<li style="margin-bottom:8px"><strong style="color:${p.niveau === 'alerte' ? '#c92a2a' : '#667085'}">${esc(p.titre)}</strong>${p.detail ? `<br><span style="font-size:13px;color:#475467">${esc(p.detail)}</span>` : ''}</li>`
+  return {
+    sujet: `[NovaCorp] Bilan de santé du ${dateFr(String(don.date))} – ${alertes.length} point(s) à vérifier`,
+    html: page(`<p>Bonjour,</p>
+      <p>Le contrôle automatique de ce matin a relevé ${alertes.length} problème(s) sur les dernières 24 h :</p>
+      <ul style="padding-left:20px">${problemes.map(ligne).join('')}</ul>
+      <p style="color:#667085;font-size:13px">Pour refaire le contrôle : SQL Editor de Supabase → <code>select automation.bilan_sante(true);</code></p>
+      <p style="color:#667085;font-size:12px;margin-top:24px">Mail automatique envoyé uniquement quand quelque chose ne va pas – NovaCorp</p>`),
   }
 }
 

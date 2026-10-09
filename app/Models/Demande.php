@@ -68,6 +68,8 @@ class Demande extends Model
             'date_fin' => 'date',
             'montant' => 'decimal:2',
             'traite_at' => 'datetime',
+            'resume_ia_at' => 'datetime',
+            'analyse_ia' => 'array',
             'etape' => 'integer',
             'nb_jours_ouvres' => 'integer',
         ];
@@ -179,6 +181,7 @@ class Demande extends Model
 
         return $q->where(fn ($q) => $q->where('demandeur_id', $user->id)
             ->orWhere('manager_id', $user->id)
+            ->orWhere('manager_titulaire_id', $user->id)
             ->orWhereIn('type', self::typesDuService($user)));
     }
 
@@ -222,6 +225,12 @@ class Demande extends Model
     public function manager(): BelongsTo
     {
         return $this->belongsTo(User::class, 'manager_id');
+    }
+
+    /** A2 – Manager d'origine quand la demande a été confiée à son suppléant pendant son absence. */
+    public function managerTitulaire(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'manager_titulaire_id');
     }
 
     public function piecesJointes(): HasMany

@@ -17,6 +17,7 @@
         <a href="{{ route('projets.index') }}" @class(['active' => request()->routeIs('projets.*')])>Projets & CA</a>
         @if (auth()->user()->hasRole('rh', 'direction', 'admin', 'manager'))
             <a href="{{ route('delais.index') }}" @class(['active' => request()->routeIs('delais.*')])>Délais</a>
+            <a href="{{ route('statistiques.index') }}" @class(['active' => request()->routeIs('statistiques.*')])>Statistiques</a>
         @endif
         @if (auth()->user()->hasRole('admin', 'rh'))
             <a href="{{ route('logs.index') }}" @class(['active' => request()->routeIs('logs.*')])>Logs</a>
@@ -43,5 +44,6 @@
     @if (session('success'))<div class="alert ok">{{ session('success') }}</div>@endif
     @yield('content')
 </main>
+@include('partials.assistant-rh')
 </body>
 </html>

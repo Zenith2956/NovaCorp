@@ -26,6 +26,36 @@
         </div>
     @endif
 
+    @if ($demande->managerTitulaire)
+        {{-- A2 : confiée au suppléant pendant l'absence du manager --}}
+        <div class="alert info">Confiée à <strong>{{ $demande->manager?->nom_complet }}</strong>, suppléant(e) de
+            {{ $demande->managerTitulaire->nom_complet }} pendant son absence.</div>
+    @endif
+
+    @include('demandes._absences_equipe', ['absencesEquipe' => $absencesEquipe])
+
+    @if ($demande->resume_ia)
+        @php
+            // Tri automatique (D1) : réservé aux valideurs, le demandeur ne voit que le résumé
+            $analyse = auth()->id() !== $demande->demandeur_id ? ($demande->analyse_ia ?? []) : [];
+            $points = array_slice(array_filter((array) ($analyse['points_attention'] ?? []), 'is_string'), 0, 5);
+            $typeSuggere = $analyse['type_suggere'] ?? null;
+            $typeSuggere = $typeSuggere && $typeSuggere !== $demande->type ? (\App\Models\TypeDemande::where('code', $typeSuggere)->value('libelle') ?? null) : null;
+            $urgenceSuggeree = ! $demande->urgente && ($analyse['urgence_suggeree'] ?? false) === true;
+        @endphp
+        <div class="alert" style="background:#f3f0ff;color:#4c2fa8">
+            <strong>En bref</strong> <span class="muted" style="font-size:.8rem">(résumé automatique par IA)</span> : {{ $demande->resume_ia }}
+            @if ($points || $typeSuggere || $urgenceSuggeree)
+                <div style="margin-top:.5rem"><strong>Points d'attention</strong> <span class="muted" style="font-size:.8rem">(suggestions de l'IA, à vérifier)</span> :</div>
+                <ul style="margin:.25rem 0 0 1.2rem">
+                    @if ($urgenceSuggeree)<li>Semble urgente, alors qu'elle n'est pas marquée comme telle.</li>@endif
+                    @if ($typeSuggere)<li>Le type « {{ $typeSuggere }} » semblerait plus adapté.</li>@endif
+                    @foreach ($points as $point)<li>{{ $point }}</li>@endforeach
+                </ul>
+            @endif
+        </div>
+    @endif
+
     {{-- Circuit de validation --}}
     <h2>Circuit de validation</h2>
     <ol class="circuit-etapes">
@@ -103,6 +133,10 @@
                 @unless (in_array('completer', $actions, true))<span class="muted" style="font-weight:normal">(obligatoire pour refuser ou demander un complément)</span>@endunless</label>
             <textarea id="commentaire" name="commentaire" rows="3">{{ old('commentaire') }}</textarea>
             @error('commentaire')<div class="err">{{ $message }}</div>@enderror
+            @include('demandes._brouillon_ia', [
+                'intentions' => array_values(array_intersect(['refuser', 'demander_complement'], $actions)),
+                'url' => route('demandes.brouillon-ia', $demande),
+            ])
         @endif
         <p class="inline" style="margin-top:1rem">
             @foreach ($actions as $action)

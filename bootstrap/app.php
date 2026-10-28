@@ -17,6 +17,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->redirectGuestsTo('/connexion');
         $middleware->redirectUsersTo('/tableau-de-bord');
+        // En ligne (Render), le HTTPS est géré par le proxy de l'hébergeur : on lui fait confiance
+        // pour que Laravel génère des liens en https et des cookies sécurisés.
+        $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

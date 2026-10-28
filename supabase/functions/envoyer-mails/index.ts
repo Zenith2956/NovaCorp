@@ -1,4 +1,4 @@
-// Edge Function « envoyer-mails » – NovaCorp (version 9 : demandes + tâches + délais + workflow + récapitulatif + bienvenue + résumé et tri IA + bilan de santé + relances des oublis + délégation et absences d'équipe)
+// Edge Function « envoyer-mails » – NovaCorp (version 10 : correction de décision + comptes créés par l'admin (lien d'activation) + tâches en pause ; version 9 : demandes + tâches + délais + workflow + récapitulatif + bienvenue + résumé et tri IA + bilan de santé + relances des oublis + délégation et absences d'équipe)
 // Envoie les mails en attente de la table public.mails_sortants via l'API Resend.
 // Appelée chaque minute par pg_cron ; peut aussi être appelée à la main : select automation.appeler_envoyer_mails();
 //
@@ -164,10 +164,14 @@ async function mailDemande(mail: MailSortant): Promise<Contenu> {
   const etapeDuMail = don.etape !== undefined && don.etape !== null ? Number(don.etape) : null
 
   // Mails devenus inutiles entre leur création et leur envoi
-  const pourLeValideur = ['relance', 'rappel_echeance', 'escalade', 'etape_suivante', 'complement_recu', 'delegation']
+  const pourLeValideur = ['relance', 'rappel_echeance', 'escalade', 'etape_suivante', 'complement_recu', 'delegation', 'correction']
   if (pourLeValideur.includes(mail.type)) {
     if (d.statut !== 'en_attente') throw new Annule('demande déjà traitée')
     if (etapeDuMail !== null && etapeDuMail !== Number(d.etape)) throw new Annule("la demande a changé d'étape")
+  }
+  // Relance d'un cycle précédent (la demande a été corrigée ou complétée depuis : nouvelle échéance)
+  if (['relance', 'rappel_echeance', 'escalade'].includes(mail.type) && don.echeance && isoDate(d.echeance_le) !== String(don.echeance)) {
+    throw new Annule('nouvelle échéance (demande corrigée ou complétée)')
   }
   if (mail.type === 'a_completer' && d.statut !== 'a_completer') throw new Annule('demande déjà complétée ou close')
   if (['a_traiter', 'relance_a_traiter', 'escalade_a_traiter'].includes(mail.type) && d.statut !== 'validee') {
@@ -351,6 +355,33 @@ async function mailDemande(mail: MailSortant): Promise<Contenu> {
           ${d.tp_prenom ? `<strong>${esc(d.tp_prenom)} ${esc(d.tp_nom)}</strong>` : 'le service'}${d.service_traitement ? ` (${esc(d.service_traitement)})` : ''}.
           Le dossier est clos.</p>${lienFiche('Voir la demande dans NovaCorp')}${pied}`),
       }
+    // R4 – décision corrigée par la RH / l'administration : retour au valideur de l'étape 1
+    case 'correction': {
+      const correcteur = await nomUtilisateur(don.par)
+      const avant = don.ancien_statut === 'refusee' ? 'refusée' : 'validée'
+      return {
+        sujet: `[NovaCorp] ${urgent}Décision corrigée – demande #${d.id} à revoir : ${d.objet}`,
+        replyTo: d.e_email,
+        html: page(`${bonjourValideur}
+          <p>La demande de <strong>${employe}</strong>, qui avait été <strong>${avant}</strong>, a été remise en attente
+          ${correcteur ? `par <strong>${esc(correcteur)}</strong>` : 'par la RH / l\'administration'}. Elle attend de nouveau votre décision.</p>
+          ${commentaire('Motif de la correction', don.commentaire ?? d.commentaire_decision, '#1c7ed6')}
+          ${resume}${etapeTexte}${delais}${boutons}
+          <p style="color:#667085;font-size:13px">Les liens des mails précédents ne fonctionnent plus : utilisez ceux-ci.</p>${pied}`),
+      }
+    }
+    case 'correction_info': {
+      const avant = don.ancien_statut === 'refusee' ? 'refus' : 'validation'
+      return {
+        sujet: `[NovaCorp] Votre demande #${d.id} est de nouveau en attente : ${d.objet}`,
+        html: page(`<p>Bonjour ${esc(d.e_prenom)},</p>
+          <p>La décision prise sur votre demande <strong>« ${esc(d.objet)} »</strong> (${avant}) a été <strong>annulée</strong> par la RH /
+          l'administration. Votre demande est de nouveau <strong>en attente</strong> de la décision de ${manager}.
+          Vous n'avez rien à faire : vous serez prévenu(e) de la nouvelle décision.</p>
+          ${commentaire('Motif de la correction', don.commentaire ?? d.commentaire_decision, '#1c7ed6')}
+          ${lienFiche('Voir la demande dans NovaCorp')}${pied}`),
+      }
+    }
     case 'relance':
       return {
         sujet: `[NovaCorp] ${urgent}Relance – demande #${d.id} en attente : ${d.objet}`,
@@ -410,6 +441,12 @@ async function blocAbsences(demandeId: number): Promise<string> {
 }
 
 /** Qui a demandé le complément : le service de l'étape, ou le manager. */
+async function nomUtilisateur(id: unknown): Promise<string | null> {
+  if (id === undefined || id === null || id === '') return null
+  const [u] = await sql`select prenom, nom from public.users where id = ${Number(id)}`
+  return u ? `${u.prenom} ${u.nom}` : null
+}
+
 function decideurAction(d: Record<string, any>): string {
   return d.valideur !== 'manager'
     ? `Le service <strong>${esc(d.valideur_service ?? d.etape_libelle ?? '')}</strong>`
@@ -425,7 +462,8 @@ async function mailTache(mail: MailSortant): Promise<Contenu> {
            t.projet_id, t.created_at, p.nom as projet,
            automation.ajouter_jours_ouvres(automation.date_paris(t.created_at), 5) as minimum,
            r.prenom as r_prenom, r.nom as r_nom, r.email as r_email,
-           c.prenom as c_prenom, c.nom as c_nom, c.email as c_email
+           c.prenom as c_prenom, c.nom as c_nom, c.email as c_email,
+           t.pause_le, t.pause_motif
       from public.taches t
       join public.users r on r.id = t.responsable_id
       left join public.projets p on p.id = t.projet_id
@@ -450,6 +488,7 @@ async function mailTache(mail: MailSortant): Promise<Contenu> {
   if (['tache_a_valider', 'tache_relance_validation', 'tache_escalade_validation'].includes(mail.type) && t.statut !== 'a_valider') {
     throw new Annule('tâche déjà validée ou renvoyée')
   }
+  if (mail.type === 'tache_pause_relance' && t.statut !== 'en_pause') throw new Annule('tâche déjà réattribuée')
 
   const responsable = `${esc(t.r_prenom)} ${esc(t.r_nom)}`
   const chef = `${esc(t.c_prenom ?? '')} ${esc(t.c_nom ?? '')}`
@@ -557,6 +596,25 @@ async function mailTache(mail: MailSortant): Promise<Contenu> {
           <div style="padding:12px;background:#fff8f0;border-left:4px solid #e67700;white-space:pre-line">${esc(String(don.commentaire ?? t.commentaire_validation ?? ''))}</div>
           ${resume}<p>${lienTache}</p>${pied}`),
       }
+    // R2 – tâche en pause (responsable retiré du projet) réattribuée par le chef de projet
+    case 'tache_reattribuee': {
+      const ancien = await nomUtilisateur(don.ancien_responsable)
+      return {
+        sujet: `[NovaCorp] Tâche qui vous est confiée – ${t.titre} (${t.projet ?? ''})`,
+        html: page(`<p>Bonjour ${esc(t.r_prenom)},</p>
+          <p>${chef} vous confie la tâche <strong>« ${esc(t.titre)} »</strong> du projet <strong>${esc(t.projet ?? '')}</strong>${ancien ? `, reprise de ${esc(ancien)} (retiré(e) du projet)` : ''}.</p>
+          <p><strong>Deadline :</strong> ${t.deadline ? dateFr(t.deadline) : 'à fixer par le chef de projet'}</p>
+          ${resume}<p>${lienTache}</p>${pied}`),
+      }
+    }
+    case 'tache_pause_relance':
+      return {
+        sujet: `[NovaCorp] Tâche en pause à réattribuer – ${t.titre} (${t.projet ?? ''})`,
+        html: page(`<p>Bonjour ${esc(t.c_prenom ?? '')},</p>
+          <p>La tâche <strong>« ${esc(t.titre)} »</strong> est <strong>en pause</strong> depuis le ${dateFr(t.pause_le)}
+          ${t.pause_motif ? `(${esc(t.pause_motif)})` : ''} : personne n'y travaille. Pensez à la confier à un membre du projet.</p>
+          <p style="margin:24px 0">${bouton(`${APP_URL}/taches/${t.id}`, 'Réattribuer la tâche', '#e67700')}</p>${pied}`),
+      }
     case 'tache_validee':
       return {
         sujet: `[NovaCorp] Tâche validée – ${t.titre}`,
@@ -654,15 +712,32 @@ async function mailRecap(mail: MailSortant): Promise<Contenu> {
 
 async function mailBienvenue(mail: MailSortant): Promise<Contenu> {
   const [u] = await sql`
-    select u.prenom, u.nom, u.email, u.actif, r.libelle as role, m.prenom as m_prenom, m.nom as m_nom
+    select u.prenom, u.nom, u.email, u.actif, r.libelle as role, m.prenom as m_prenom, m.nom as m_nom,
+           u.jeton_activation, u.jeton_activation_expire_at, (u.jeton_activation_expire_at > now()) as jeton_valide
       from public.users u left join public.roles r on r.id = u.role_id left join public.users m on m.id = u.manager_id
      where u.id = ${mail.user_id}`
   if (!u) throw new Error(`utilisateur ${mail.user_id} introuvable`)
   if (!u.actif) throw new Annule('compte désactivé')
+  // R1 – compte créé par l'admin : lien pour choisir son mot de passe (7 jours, usage unique)
+  const lienActivation = u.jeton_activation && u.jeton_valide ? `${APP_URL}/activation/${u.jeton_activation}` : null
+  const expire = lienActivation ? dateFr(u.jeton_activation_expire_at) : ''
+  if (mail.type === 'activation') {
+    if (!lienActivation) throw new Annule('compte déjà activé ou lien expiré')
+    return {
+      sujet: `[NovaCorp] Activez votre compte, ${u.prenom}`,
+      html: page(`<p>Bonjour ${esc(u.prenom)},</p>
+        <p>Votre compte NovaCorp (${esc(u.email)}) est prêt. Choisissez votre mot de passe pour l'activer :</p>
+        <p style="margin:24px 0">${bouton(lienActivation, 'Choisir mon mot de passe', '#2b8a3e')}</p>
+        <p style="color:#667085;font-size:13px">Ce lien est valable jusqu'au ${expire} et ne sert qu'une fois. Les liens envoyés précédemment ne fonctionnent plus.</p>
+        <p style="color:#667085;font-size:12px;margin-top:24px">Mail envoyé à la demande de l'administrateur – NovaCorp</p>`),
+    }
+  }
   const delais = await sql`select libelle, delai_escalade from public.types_demande order by libelle`
   const manager = u.m_prenom ? `${esc(u.m_prenom)} ${esc(u.m_nom)}` : null
   const etapes = [
-    `Connectez-vous à ${lienTexte(`${APP_URL}/connexion`, 'NovaCorp')} avec votre adresse ${esc(u.email)} et vérifiez vos informations (téléphone).`,
+    lienActivation
+      ? `Choisissez votre mot de passe avec le bouton ci-dessous (lien valable jusqu'au ${expire}), puis vérifiez vos informations (téléphone).`
+      : `Connectez-vous à ${lienTexte(`${APP_URL}/connexion`, 'NovaCorp')} avec votre adresse ${esc(u.email)} et vérifiez vos informations (téléphone).`,
     manager ? `Rencontrez votre manager, <strong>${manager}</strong> (en copie de ce mail).` : 'Présentez-vous à votre responsable.',
     `Consultez vos ${lienTexte(`${APP_URL}/taches`, 'tâches')} et les ${lienTexte(`${APP_URL}/projets`, 'projets')} auxquels vous participez.`,
     `Besoin de matériel ? Faites une ${lienTexte(`${APP_URL}/demandes/nouvelle`, 'demande')} : elle est envoyée automatiquement à votre manager.`,
@@ -674,7 +749,9 @@ async function mailBienvenue(mail: MailSortant): Promise<Contenu> {
     html: page(`<p>Bonjour ${esc(u.prenom)},</p>
       <p>Bienvenue chez NovaCorp${u.role ? ` en tant que <strong>${esc(u.role)}</strong>` : ''} ! Voici votre checklist du premier jour :</p>
       <ol style="line-height:1.8">${etapes.map((e) => `<li>☐ ${e}</li>`).join('')}</ol>
-      <p style="margin:24px 0">${bouton(`${APP_URL}/connexion`, 'Ouvrir NovaCorp', '#3b5bdb')}</p>
+      <p style="margin:24px 0">${lienActivation
+        ? bouton(lienActivation, 'Choisir mon mot de passe', '#2b8a3e')
+        : bouton(`${APP_URL}/connexion`, 'Ouvrir NovaCorp', '#3b5bdb')}</p>
       ${manager ? `<p style="color:#667085;font-size:13px">${manager}, vous êtes en copie : pensez à accueillir ${esc(u.prenom)} et à lui présenter l'équipe et ses projets.</p>` : ''}
       <p style="color:#667085;font-size:12px;margin-top:24px">Mail automatique envoyé à la création du compte – NovaCorp</p>`),
   }

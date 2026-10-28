@@ -1,10 +1,13 @@
 @extends('layouts.app')
-@section('title', 'Créer un compte')
+@section('title', 'Ajouter un employé')
+@section('retour', route('employes.index'))
 
 @section('content')
-<div class="card auth" style="max-width:600px">
-    <h1>Créer un compte</h1>
-    <form method="POST" action="{{ route('register') }}">
+<div class="card" style="max-width:720px">
+    <h1>Ajouter un employé</h1>
+    <p class="muted">Le compte est créé sans mot de passe. L'employé reçoit le mail de bienvenue avec un lien
+        pour choisir son mot de passe (valable {{ \App\Models\User::VALIDITE_ACTIVATION_JOURS }} jours) ; son manager est en copie.</p>
+    <form method="POST" action="{{ route('employes.store') }}">
         @csrf
         <div class="row">
             <div>
@@ -18,7 +21,6 @@
                 @error('nom')<div class="err">{{ $message }}</div>@enderror
             </div>
         </div>
-
         <div class="row">
             <div>
                 <label for="email">E-mail professionnel</label>
@@ -31,7 +33,6 @@
                 @error('telephone')<div class="err">{{ $message }}</div>@enderror
             </div>
         </div>
-
         <div class="row">
             <div>
                 <label for="role_id">Rôle</label>
@@ -51,23 +52,10 @@
                         <option value="{{ $m->id }}" @selected(old('manager_id') == $m->id)>{{ $m->nom_complet }}</option>
                     @endforeach
                 </select>
+                @error('manager_id')<div class="err">{{ $message }}</div>@enderror
             </div>
         </div>
-
-        <div class="row">
-            <div>
-                <label for="password">Mot de passe (8 caractères min.)</label>
-                <input id="password" type="password" name="password" required>
-                @error('password')<div class="err">{{ $message }}</div>@enderror
-            </div>
-            <div>
-                <label for="password_confirmation">Confirmation</label>
-                <input id="password_confirmation" type="password" name="password_confirmation" required>
-            </div>
-        </div>
-
-        <p><button class="btn" type="submit">Créer mon compte</button></p>
+        <p><button class="btn" type="submit">Créer le compte et envoyer l'invitation</button></p>
     </form>
-    <p class="muted">Déjà inscrit ? <a href="{{ route('login') }}">Se connecter</a></p>
 </div>
 @endsection

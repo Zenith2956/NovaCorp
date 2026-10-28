@@ -24,8 +24,8 @@ class TacheController extends Controller
             // Tâches de mes projets (chef de projet), deadline à fixer en premier
             'tachesProjets' => Tache::with(['projet', 'responsable'])
                 ->whereIn('projet_id', $user->projetsDiriges()->pluck('id'))
-                ->whereIn('statut', ['a_faire', 'en_cours', 'expiree', 'a_valider'])
-                ->orderByRaw("statut <> 'a_valider'")->orderByRaw('deadline is not null')->orderBy('deadline')->get(),
+                ->whereIn('statut', ['a_faire', 'en_cours', 'expiree', 'a_valider', 'en_pause'])
+                ->orderByRaw("statut <> 'en_pause'")->orderByRaw("statut <> 'a_valider'")->orderByRaw('deadline is not null')->orderBy('deadline')->get(),
         ]);
     }
 
@@ -90,14 +90,15 @@ class TacheController extends Controller
 
     public function show(Request $request, Tache $tache)
     {
-        $tache->load(['projet.chefProjet', 'responsable', 'createur', 'historique.auteur']);
+        $tache->load(['projet.chefProjet', 'projet.membres', 'responsable', 'createur', 'historique.auteur', 'pauseAncienResponsable']);
         abort_unless($tache->visiblePar($request->user()), 403);
 
         return view('taches.show', [
             'tache' => $tache,
-            'peutModifierDeadline' => $tache->deadlineModifiablePar($request->user()) && $tache->statut !== 'terminee',
+            'peutModifierDeadline' => $tache->deadlineModifiablePar($request->user()) && ! in_array($tache->statut, ['terminee', 'en_pause'], true),
             'peutChangerStatut' => in_array($request->user()->id, [$tache->responsable_id, $tache->chefProjetId()], true)
-                && ! in_array($tache->statut, ['a_valider', 'terminee'], true),
+                && ! in_array($tache->statut, ['a_valider', 'terminee', 'en_pause'], true),
+            'peutReattribuer' => $tache->statut === 'en_pause' && $tache->validablePar($request->user()),
             'peutValider' => $tache->statut === 'a_valider' && $tache->validablePar($request->user()),
             'minimum' => $tache->deadlineMinimum(),
         ]);
@@ -108,7 +109,7 @@ class TacheController extends Controller
         $user = $request->user();
         abort_unless(in_array($user->id, [$tache->responsable_id, $tache->chefProjetId()], true), 403);
         $data = $request->validate(['statut' => ['required', Rule::in(Tache::STATUTS_MANUELS)]]);
-        abort_if(in_array($tache->statut, ['a_valider', 'terminee'], true), 403, 'Tâche en attente de validation ou terminée.');
+        abort_if(in_array($tache->statut, ['a_valider', 'terminee', 'en_pause'], true), 403, 'Tâche en attente de validation, terminée ou en pause.');
 
         // Tâche de projet terminée par le responsable : le chef de projet doit la valider
         $statut = $data['statut'] === 'terminee' && $tache->projet_id && ! $tache->validablePar($user)
@@ -148,6 +149,40 @@ class TacheController extends Controller
         return back()->with('success', $renvoi
             ? 'Tâche renvoyée au responsable avec votre commentaire.'
             : 'Tâche validée et terminée.');
+    }
+
+    /**
+     * R2 – Le chef de projet confie une tâche en pause à un membre : elle repasse « à faire ».
+     * Deadline dépassée : une nouvelle date est obligatoire (au plus tôt aujourd'hui).
+     */
+    public function reattribuer(Request $request, Tache $tache)
+    {
+        $user = $request->user();
+        abort_unless($tache->statut === 'en_pause' && $tache->validablePar($user), 403);
+        $projet = $tache->projet;
+        $responsables = $projet->membres()->pluck('users.id')->push($projet->chef_projet_id)->all();
+        $minimum = $tache->deadlineMinimum();
+        $depassee = $tache->deadline && $tache->deadline->toDateString() < Calendrier::aujourdhui()->toDateString();
+
+        $data = $request->validate([
+            'responsable_id' => ['required', Rule::in($responsables)],
+            'deadline' => [$depassee ? 'required' : 'nullable', 'date', 'after_or_equal:'.$minimum->toDateString()],
+        ], [
+            'responsable_id.in' => 'Choisissez un membre du projet.',
+            'deadline.required' => 'La deadline est dépassée : fixez-en une nouvelle.',
+            'deadline.after_or_equal' => 'Deadline : au plus tôt le '.$minimum->format('d/m/Y').'.',
+        ], ['responsable_id' => 'nouveau responsable']);
+
+        $this->enregistrer(fn () => $tache->update([
+            'responsable_id' => (int) $data['responsable_id'],
+            'statut' => 'a_faire',
+            ...(! empty($data['deadline']) ? ['deadline' => $request->date('deadline'), 'deadline_fixee_par' => $user->id] : []),
+            'pause_le' => null, 'pause_motif' => null, 'pause_ancien_responsable_id' => null,
+            'derniere_action_par' => $user->id,
+            'derniere_action_canal' => 'appli',
+        ]));
+
+        return back()->with('success', 'Tâche réattribuée à '.User::find($data['responsable_id'])?->nom_complet.' : un mail lui est envoyé.');
     }
 
     /** Fixer / repousser / modifier la deadline depuis l'application. */

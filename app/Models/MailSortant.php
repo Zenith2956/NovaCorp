@@ -21,7 +21,7 @@ class MailSortant extends Model
     ];
 
     protected $fillable = [
-        'demande_id', 'type', 'destinataires', 'copies', 'statut',
+        'demande_id', 'tache_id', 'user_id', 'type', 'destinataires', 'copies', 'donnees', 'statut',
         'tentatives', 'prochain_essai_at', 'derniere_erreur', 'fournisseur_id', 'envoye_at',
     ];
 
@@ -30,6 +30,7 @@ class MailSortant extends Model
         return [
             'destinataires' => 'array',
             'copies' => 'array',
+            'donnees' => 'array',
             'prochain_essai_at' => 'datetime',
             'envoye_at' => 'datetime',
         ];

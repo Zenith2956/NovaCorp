@@ -66,7 +66,12 @@ class DelaiController extends Controller
     /** A3 – Seuil de l'alerte « équipe trop absente » (pourcentage de l'équipe absente un même jour). */
     public function updateParametres(Request $request)
     {
-        $data = $request->validate(['seuil_absences_equipe_pct' => ['required', 'integer', 'min:10', 'max:100']]);
+        $data = $request->validate(
+            ['seuil_absences_equipe_pct' => ['required', 'integer', 'min:10', 'max:100']],
+            ['seuil_absences_equipe_pct.min' => 'Le seuil d\'alerte doit être compris entre 10 et 100 %.',
+             'seuil_absences_equipe_pct.max' => 'Le seuil d\'alerte doit être compris entre 10 et 100 %.'],
+            ['seuil_absences_equipe_pct' => 'seuil d\'alerte'],
+        );
         Parametre::updateOrCreate(['cle' => 'seuil_absences_equipe_pct'], ['valeur' => (string) $data['seuil_absences_equipe_pct']]);
 
         return back()->with('success', "Seuil de l'alerte absences : {$data['seuil_absences_equipe_pct']} % de l'équipe.");

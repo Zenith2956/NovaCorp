@@ -19,6 +19,12 @@
             <a class="btn" href="{{ route('demandes.create', ['refaire' => $demande->id]) }}">Refaire la demande</a>
         </div>
     @endif
+    @if ($demande->statut === 'en_attente' && $demande->commentaire_decision)
+        <div class="alert info">
+            <strong>Décision précédente corrigée par la RH / l'administration :</strong>
+            <span style="white-space:pre-line">{{ $demande->commentaire_decision }}</span>
+        </div>
+    @endif
     @if (in_array($demande->statut, ['refusee', 'a_completer'], true) && $demande->commentaire_decision)
         <div class="alert {{ $demande->statut === 'refusee' ? 'ko' : 'info' }}">
             <strong>{{ $demande->statut === 'refusee' ? 'Motif du refus' : 'Complément demandé' }} :</strong>
@@ -128,15 +134,22 @@
     <h2>Actions</h2>
     <form method="POST" action="{{ route('demandes.action', $demande) }}">
         @csrf
-        @if (array_intersect($actions, ['refuser', 'demander_complement', 'completer']))
-            <label for="commentaire">{{ in_array('completer', $actions, true) ? 'Complément apporté' : 'Commentaire' }}
-                @unless (in_array('completer', $actions, true))<span class="muted" style="font-weight:normal">(obligatoire pour refuser ou demander un complément)</span>@endunless</label>
+        @if (array_intersect($actions, ['refuser', 'demander_complement', 'completer', 'corriger']))
+            <label for="commentaire">{{ match (true) {
+                    in_array('completer', $actions, true) => 'Complément apporté',
+                    in_array('corriger', $actions, true) => 'Motif de la correction',
+                    default => 'Commentaire',
+                } }}
+                @if (in_array('corriger', $actions, true))<span class="muted" style="font-weight:normal">(obligatoire : envoyé au manager et à l'employé)</span>
+                @elseif (! in_array('completer', $actions, true))<span class="muted" style="font-weight:normal">(obligatoire pour refuser ou demander un complément)</span>@endif</label>
             <textarea id="commentaire" name="commentaire" rows="3">{{ old('commentaire') }}</textarea>
             @error('commentaire')<div class="err">{{ $message }}</div>@enderror
-            @include('demandes._brouillon_ia', [
-                'intentions' => array_values(array_intersect(['refuser', 'demander_complement'], $actions)),
-                'url' => route('demandes.brouillon-ia', $demande),
-            ])
+            @if (array_intersect(['refuser', 'demander_complement'], $actions))
+                @include('demandes._brouillon_ia', [
+                    'intentions' => array_values(array_intersect(['refuser', 'demander_complement'], $actions)),
+                    'url' => route('demandes.brouillon-ia', $demande),
+                ])
+            @endif
         @endif
         <p class="inline" style="margin-top:1rem">
             @foreach ($actions as $action)

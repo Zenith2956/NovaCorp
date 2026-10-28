@@ -21,6 +21,18 @@
     @endif
 </div>
 
+@if ($tachesEnPause->isNotEmpty())
+<div class="alert pause">
+    <strong>⏸ {{ $tachesEnPause->count() }} tâche{{ $tachesEnPause->count() > 1 ? 's' : '' }} en pause à réattribuer dans vos projets</strong>
+    <ul style="margin:.4rem 0 0">
+        @foreach ($tachesEnPause as $t)
+            <li><a href="{{ route('taches.show', $t) }}">{{ $t->titre }}</a> ({{ $t->projet->nom }})
+                <span class="muted">— {{ $t->pause_motif }}, depuis le {{ $t->pause_le?->timezone('Europe/Paris')->format('d/m/Y') }}</span></li>
+        @endforeach
+    </ul>
+</div>
+@endif
+
 @if ($aUneEquipe)
 <div class="card">
     <h2>Mon suppléant pendant mes congés</h2>

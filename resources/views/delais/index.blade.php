@@ -90,7 +90,8 @@
         @endforeach
     </table>
     @if ($peutRegler)
-        @if ($errors->any())<div class="err">{{ $errors->first() }}</div>@endif
+        {{-- Erreurs du formulaire des délais seulement (celle du seuil s'affiche sous son champ, R6) --}}
+        @if ($errors->any() && ! $errors->has('seuil_absences_equipe_pct'))<div class="err">{{ $errors->first() }}</div>@endif
         <p><button class="btn">Enregistrer les délais</button></p>
     </form>
     @endif

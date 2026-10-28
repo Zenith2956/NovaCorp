@@ -4,12 +4,15 @@
 > **À mettre à jour à chaque nouvelle session de travail** (ajouter une entrée dans « Historique » en haut **avec le nom de l'auteur de la demande**, puis compléter les sections concernées).
 > Version en ligne : https://claude.ai/code/artifact/aad29b72-0640-4703-99fa-5082f2a1dcaf
 
-Dernière mise à jour : 09/10/2026
+Dernière mise à jour : 28/10/2026
 
 ## Historique
 
 | Date | Auteur | Demande | Résultat |
 | --- | --- | --- | --- |
+| 28/10/2026 | Arthur | Corriger R5 et R6, puis guide pour R7 (assistant RH) et R3 (prompts IA) | ✅ R5 : `Projet::prochaineReunion` saute aujourd'hui après 8 h ou si le récap est déjà parti ; R6 : message du seuil d'absences lisible et affiché une fois (`DelaiController`, `delais/index`) ; 2 tests ajoutés à `RecetteCorrectionsTest`, tous OK. R7 et R3 faits par Arthur dans n8n (message système de l'agent, description de `consulter_mes_demandes`, prompts D1/D3) et testés. Toutes les remarques de la recette sont closes. |
+| 28/10/2026 | Arthur | Corrections de la recette : R1 (plus d'inscription libre, l'admin ajoute les personnes), R2 (avertissement avant de retirer un membre qui a des tâches ; tâches mises en pause et mises en avant), R4 (bien résoudre « Corriger ») | ✅ Migration `2026_10_28_000014_recette_corrections` (+ SQL) : `users.jeton_activation` (lien 7 jours), statut de tâche `en_pause` (5 transitions, `pause_le`, `pause_motif`, `pause_ancien_responsable_id`), triggers `historiser`, `mail_decision`, `controler_tache`, `mail_tache`, `planifier_rappels` mis à jour, paliers de relance par étape **et échéance**. Laravel : `/inscription` supprimée, `EmployeController::create/store/renvoyerActivation` (admin), `ActivationController`, page d'avertissement `projets/retirer-membre`, `TacheController::reattribuer`, bandeaux « en pause » (projet, tâche, tableau de bord). Edge Function `envoyer-mails` v10 (déployée par Arthur, v13 Supabase) : mails `correction`, `correction_info`, `activation`, `tache_reattribuee`, `tache_pause_relance`, lien d'activation dans la bienvenue. Tests : `RecetteCorrectionsTest` + `WorkflowTest` OK (Arthur), `tests-workflow.sql` 62/62, recette navigateur (section 5 bis de `docs/plan-de-tests.md`) 11 ✅. |
+| 28/10/2026 | Arthur | Plan de tests de toutes les fonctionnalités (admin / manager / employé…), puis exécution complète | ✅ `docs/plan-de-tests.md` (55 tests : accès, employé, manager, services/direction, admin, assistant RH, automatisations) déroulé dans le navigateur intégré avec les comptes de démo : 53 ✅, 1 ❌ (IA2 : congé décès d'une tante, l'agent ne renvoie pas vers les RH), 1 ⏭️ ; suites SQL délais 62/62 et workflow 50/50 ; bilan de santé 0 alerte. 7 remarques avec correctif proposé (R1 inscription en RH possible, R2 page 422 au retrait d'un membre, R4 pas de mail au manager après « Corriger »…). Données de test préfixées `[TEST]` (#150–154, tâches #46–47, projets #21–22) ; réglages remis à l'état initial. |
 | 09/10/2026 | Arthur | PDF des documents RH refaits (vrai texte, nouveaux noms « 01 - NovaCorp — … .pdf ») : mettre le reste à jour | ✅ Comparaison automatique PDF ↔ `docs-rh/*.md` : contenu identique pour les 8 documents (seuls les pieds de page diffèrent). Pieds de page des `.md` mis à jour avec le nom exact du PDF ; `docs/tp6-assistant-rh.md` mis à jour. Réingestion n8n à relancer (pieds de page modifiés) |
 | 09/10/2026 | Arthur | TP séance 6 – assistant RH (RAG + agent n8n), étape par étape | ✅ Migration `supabase/migrations/20261009140000_create_documents_vector.sql` appliquée (table `documents` vector(1536) pour `openai/text-embedding-3-small` via OpenRouter, index HNSW, RLS sans policy, fonction `match_documents` attendue par n8n) ; `vector` déjà actif. Parties 1 à 4 faites : table `documents` (16 passages), workflows INGESTION et ASSISTANT RH – RAG (Q&A Chain + Supabase Vector Store), tests T1–T5 conformes après ajout d'une règle anti-extrapolation (T3). Bulle « Assistant RH » sur le site (widget `@n8n/chat`, relayé par Laravel `POST /assistant-rh` avec Basic Auth côté serveur, identité ajoutée par le serveur), testée en réel (refus hors périmètre OK). Partie 5 faite : AI Agent + mémoire + 3 outils (`documentation_rh`, `consulter_mes_demandes` sur la vue `v_demandes_employe` filtrée par l'email du serveur, `infos_entreprise` sur `v_infos_entreprise`) ; C1–C4 + tests bonus OK ; bulle redimensionnable. Documents RH reçus en PDF image (`public/DocumentsRH/`) → texte extrait par OCR, relu, mis en Markdown dans `docs-rh/*.md` (8 fichiers). Suivi : `docs/tp6-assistant-rh.md` |
 | 09/10/2026 | Arthur | C2 intégration continue GitHub (tests + détection de secrets) | ✅ Poussé sur develop (commit 6735dd2, « upgrade overhaul ») : premier passage de la CI tout vert en 1 min 55 (Secrets 5 s, Laravel 22 s, Flutter 1 min 52). `.github/workflows/ci.yml` (push/PR sur main et develop) – 3 jobs : **Secrets** (aucun `.env` suivi, `.env.example` sans valeur sensible, gitleaks sur les fichiers + les commits de la PR, règles maison `.gitleaks.toml` : mots de passe `.env` et URL PostgreSQL), **Tests Laravel** (PHP 8.4, SQLite), **Flutter** (analyze + test). Vérifié localement : gitleaks retrouve bien l'ancienne fuite du 08/10 (ignorée dans `.gitleaksignore`, mot de passe déjà changé) et rien d'autre. Les suites SQL Supabase restent manuelles (pg_cron / pg_net / Vault absents d'un Postgres de CI) |
@@ -101,12 +104,12 @@ Stack : PHP 8.3, Laravel 13, vues Blade, PostgreSQL 17 sur Supabase (projet `Nov
 
 | Module | Contenu |
 | --- | --- |
-| Authentification | Connexion, création de compte, déconnexion ; 5 essais par minute maximum |
+| Authentification | Connexion, déconnexion ; 5 essais par minute maximum. Plus d'inscription libre (28/10) : l'admin crée les comptes (Employés → + Ajouter un employé), l'employé choisit son mot de passe avec le lien d'activation du mail de bienvenue (7 jours, renvoyable) |
 | Logs | Table `connexion_logs` : connexion, déconnexion, échec, inscription + adresse IP ; page `/logs` réservée RH et admin |
 | Employés | Nom, prénom, e-mail, téléphone, rôle, manager ; annuaire avec recherche |
 | Demandes | Formulaire envoyé par mail au manager, jusqu'à 5 pièces jointes de 50 Mo (document, vocal, photo, vidéo) |
 | Validation | Le manager répond au mail ; le statut (en attente, validée, refusée) est changé à la main par le manager, les RH ou l'admin ; aucun délai |
-| Projets et CA | Projets, membres, chef de projet, chiffre d'affaires mensuel |
+| Projets et CA | Projets, membres, chef de projet, chiffre d'affaires mensuel. Retrait d'un membre qui a des tâches : avertissement, tâches « en pause » à réattribuer par le chef (rappel après 3 jours ouvrés) |
 | Données de test | 120 employés (1 admin, 3 direction, 10 managers, 8 RH, 60 dev, 25 commerciaux, 13 comptables), 12 projets, 12 mois de CA |
 
 Tables : `roles`, `users` (employés), `demandes`, `pieces_jointes`, `projets`, `projet_user`, `chiffres_affaires`, `connexion_logs`.
@@ -127,6 +130,11 @@ Limite actuelle : l'application envoie les mails mais ne lit pas encore les rép
 | `vendor/autoload.php` introuvable | Conséquence du problème précédent : `vendor` incomplet | Réglé par la réinstallation |
 | `Access denied for user 'root'@'localhost' (using password: NO)` | `DB_PASSWORD` vide dans `.env` alors que root a un mot de passe | Créer un utilisateur dédié `novacorp` et le mettre dans `.env` |
 | `mysql` n'est pas reconnu | Client absent du PATH ; `Get-ChildItem -Recurse` trop lent | `Get-CimInstance Win32_Service` → MariaDB 12.2 dans `C:\Program Files\MariaDB 12.2\bin`, client `mariadb.exe` |
+
+| Recette 28/10 : « Corriger » ne prévenait personne et les relances ne repartaient pas | Aucun mail prévu pour validée/refusée → en attente ; palier de relance unique par étape | Mails `correction` / `correction_info`, motif obligatoire, palier de relance par étape **et** échéance |
+| Recette 28/10 : n'importe qui pouvait s'inscrire comme RH | Inscription libre avec choix du rôle | Inscription supprimée ; comptes créés par l'admin + lien d'activation |
+| Recette 28/10 : retrait d'un membre avec tâches → page d'erreur 422 | `abort(422)` dans `ProjetController` | Page d'avertissement + tâches mises en pause |
+| Tests Laravel impossibles dans le conteneur de Claude | Le `vendor` exige PHP 8.4, le conteneur a PHP 8.3 | `php -l` + compilation Blade côté Claude ; `php artisan test` lancé par Arthur |
 
 ## Procédure d'installation qui fonctionne
 
@@ -188,3 +196,4 @@ Décision du 08/10/2026 (Arthur) : base de données hébergée sur **Supabase** 
 - [ ] Lire automatiquement les réponses mail des managers (IMAP) pour tracer la validation.
 - [ ] Validation en un clic, relances automatiques et délais sur les demandes.
 - [ ] Tableau de bord RH et graphiques de chiffre d'affaires.
+- [x] Recette 28/10 : remarques R1 à R7 corrigées (28/10/2026). Penser à ré-exporter les workflows n8n modifiés (assistant RH, D1, D3) dans `workflows/`.

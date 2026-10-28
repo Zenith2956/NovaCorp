@@ -18,9 +18,13 @@ class User extends Authenticatable
 
     protected $fillable = [
         'nom', 'prenom', 'email', 'telephone', 'role_id', 'manager_id', 'suppleant_id', 'actif', 'password',
+        'jeton_activation', 'jeton_activation_expire_at',
     ];
 
-    protected $hidden = ['password', 'remember_token'];
+    protected $hidden = ['password', 'remember_token', 'jeton_activation'];
+
+    /** R1 – durée de validité du lien d'activation envoyé au nouvel employé. */
+    public const VALIDITE_ACTIVATION_JOURS = 7;
 
     protected function casts(): array
     {
@@ -28,7 +32,25 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'actif' => 'boolean',
+            'jeton_activation_expire_at' => 'datetime',
         ];
+    }
+
+    /** R1 – compte créé par l'admin dont le mot de passe n'a pas encore été choisi. */
+    public function getEnAttenteActivationAttribute(): bool
+    {
+        return $this->jeton_activation !== null;
+    }
+
+    /** R1 – nouveau lien d'activation (les liens précédents ne marchent plus). */
+    public function nouveauJetonActivation(): string
+    {
+        $this->forceFill([
+            'jeton_activation' => $jeton = (string) \Illuminate\Support\Str::uuid(),
+            'jeton_activation_expire_at' => now()->addDays(self::VALIDITE_ACTIVATION_JOURS),
+        ])->save();
+
+        return $jeton;
     }
 
     public function getNomCompletAttribute(): string

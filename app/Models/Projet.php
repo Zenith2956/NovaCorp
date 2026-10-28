@@ -59,12 +59,19 @@ class Projet extends Model
     }
 
     /** Prochaine réunion (aujourd'hui compris), donc prochain récapitulatif. */
+    /** Heure d'envoi du récapitulatif de réunion (cron novacorp-recaps, heure de Paris). */
+    public const HEURE_RECAP = 8;
+
     public function prochaineReunion(): ?CarbonImmutable
     {
         if (! $this->reunion_frequence) {
             return null;
         }
+        // R5 (recette 28/10) : le récapitulatif part à 8 h ; passé 8 h (ou déjà envoyé aujourd'hui), on cherche à partir de demain
         $jour = Calendrier::aujourdhui();
+        if (now('Europe/Paris')->hour >= self::HEURE_RECAP || $this->dernier_recap_le?->toDateString() === $jour->toDateString()) {
+            $jour = $jour->addDay();
+        }
         for ($i = 0; $i < 120; $i++, $jour = $jour->addDay()) {
             if ($this->estJourDeReunion($jour)) {
                 return $jour;

@@ -22,6 +22,10 @@ class DashboardController extends Controller
             'mesDemandesEnAttente' => $user->demandes()->where('statut', 'en_attente')->count(),
             'demandesARecevoir' => Demande::aTraiterPar($user)->count(),
             'tachesAFaire' => $user->taches()->whereIn('statut', ['a_faire', 'en_cours'])->count(),
+            // R2 – tâches en pause (responsable retiré) dans les projets que je dirige
+            'tachesEnPause' => Tache::with(['projet', 'pauseAncienResponsable'])
+                ->whereIn('projet_id', $user->projetsDiriges()->pluck('id'))
+                ->where('statut', 'en_pause')->orderBy('pause_le')->get(),
             'deadlinesAFixer' => Tache::whereIn('projet_id', $user->projetsDiriges()->pluck('id'))
                 ->whereNull('deadline')->whereIn('statut', ['a_faire', 'en_cours'])->count(),
             'demandesEnRetard' => $user->demandesRecues()->where('statut', 'en_attente')

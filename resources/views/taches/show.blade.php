@@ -10,7 +10,7 @@
     </div>
     <table>
         <tr><th style="width:200px">Projet</th><td>@if ($tache->projet)<a href="{{ route('projets.show', $tache->projet) }}">{{ $tache->projet->nom }}</a> (chef : {{ $tache->projet->chefProjet?->nom_complet }})@else Hors projet @endif</td></tr>
-        <tr><th>Responsable</th><td>{{ $tache->responsable->nom_complet }}</td></tr>
+        <tr><th>Responsable</th><td>@if ($tache->statut === 'en_pause')<span class="muted">Aucun (était {{ $tache->pauseAncienResponsable?->nom_complet ?? $tache->responsable->nom_complet }})</span>@else{{ $tache->responsable->nom_complet }}@endif</td></tr>
         <tr><th>Créée par</th><td>{{ $tache->createur?->nom_complet }} le {{ $tache->created_at?->timezone('Europe/Paris')->format('d/m/Y') }}</td></tr>
         <tr><th>Deadline</th><td>
             @if ($tache->deadline)
@@ -24,6 +24,19 @@
     </table>
     @if ($tache->description)<p style="white-space:pre-line;margin-top:1rem">{{ $tache->description }}</p>@endif
 </div>
+
+@if ($tache->statut === 'en_pause')
+<div class="alert pause">
+    <strong>⏸ Tâche en pause depuis le {{ $tache->pause_le?->timezone('Europe/Paris')->format('d/m/Y') }}</strong>
+    @if ($tache->pause_motif) — {{ $tache->pause_motif }}@endif.
+    Pas de relance ni d'expiration tant qu'elle n'est pas réattribuée.
+    @if ($peutReattribuer)
+        <div style="margin-top:.6rem">@include('taches._reattribuer', ['tache' => $tache])</div>
+    @else
+        <br><span class="muted">Le chef de projet ({{ $tache->projet?->chefProjet?->nom_complet }}) doit la confier à un membre.</span>
+    @endif
+</div>
+@endif
 
 @if ($peutChangerStatut)
 <div class="card">

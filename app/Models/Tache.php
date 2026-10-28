@@ -25,7 +25,11 @@ class Tache extends Model
         'a_valider' => 'À valider',
         'terminee' => 'Terminée',
         'expiree' => 'Expirée',
+        'en_pause' => 'En pause',
     ];
+
+    /** R2 – statuts « non terminés » : mis en pause si le responsable est retiré du projet. */
+    public const STATUTS_ACTIFS = ['a_faire', 'en_cours', 'a_valider', 'expiree'];
 
     /** Statuts que le responsable peut choisir (l'expiration est automatique). */
     public const STATUTS_MANUELS = ['a_faire', 'en_cours', 'terminee'];
@@ -37,6 +41,7 @@ class Tache extends Model
         'titre', 'description', 'projet_id', 'responsable_id', 'cree_par', 'statut', 'deadline',
         'deadline_initiale', 'nb_reports', 'deadline_fixee_par', 'deadline_fixee_at', 'jeton_deadline', 'termine_at',
         'commentaire_validation', 'derniere_action_par', 'derniere_action_canal',
+        'pause_le', 'pause_motif', 'pause_ancien_responsable_id',
     ];
 
     protected $hidden = ['jeton_deadline'];
@@ -48,6 +53,7 @@ class Tache extends Model
             'deadline_initiale' => 'date',
             'deadline_fixee_at' => 'datetime',
             'termine_at' => 'datetime',
+            'pause_le' => 'datetime',
         ];
     }
 
@@ -83,6 +89,9 @@ class Tache extends Model
             if ($t->statut === 'terminee' && $t->getOriginal('statut') !== 'terminee') {
                 $t->termine_at = now();
             }
+            if ($t->exists && $t->getOriginal('statut') === 'en_pause' && $t->statut !== 'en_pause') {
+                $t->pause_le = $t->pause_motif = $t->pause_ancien_responsable_id = null;
+            }
         });
 
         static::created(fn (Tache $t) => Historique::consigner($t, 'tache', true));
@@ -102,6 +111,12 @@ class Tache extends Model
     public function responsable(): BelongsTo
     {
         return $this->belongsTo(User::class, 'responsable_id');
+    }
+
+    /** R2 – responsable retiré du projet (tâche en pause). */
+    public function pauseAncienResponsable(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'pause_ancien_responsable_id');
     }
 
     public function createur(): BelongsTo

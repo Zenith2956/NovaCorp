@@ -75,7 +75,7 @@ BEGIN
     PERFORM pg_temp.verif('T2', 'annulée → en attente interdit', msg, 'Transition interdite : annulee → en_attente');
     PERFORM pg_temp.verif('T3', 'annulation : mail aux valideurs de l''étape',
         (SELECT count(*) FROM public.mails_sortants WHERE demande_id = d2 AND type = 'annulation'), 1::bigint);
-    PERFORM pg_temp.verif('T4', '25 transitions déclarées', (SELECT count(*) FROM public.transitions), 25::bigint);
+    PERFORM pg_temp.verif('T4', '30 transitions déclarées (dont 5 pour les tâches en pause)', (SELECT count(*) FROM public.transitions), 30::bigint);
 
     -- =================================================================
     -- C. Circuit congé > 5 jours : manager → RH → traitement RH
@@ -193,6 +193,61 @@ BEGIN
     BEGIN UPDATE public.taches SET statut = 'a_faire' WHERE id = t; msg := 'acceptée';
     EXCEPTION WHEN others THEN msg := SQLERRM; END;
     PERFORM pg_temp.verif('V7', 'terminée → à faire interdit', msg, 'Transition interdite : terminee → a_faire');
+
+    -- =================================================================
+    -- K. Correction d'une décision par la RH (R4, recette du 28/10/2026)
+    -- =================================================================
+    INSERT INTO public.demandes (demandeur_id, type, objet, message, statut, created_at, updated_at)
+        VALUES (u_dev, 'autre', 'Correction', 'x', 'en_attente', now(), now()) RETURNING id INTO d2;
+    UPDATE public.demandes SET statut = 'validee', decision_at = now(), decision_par = u_man, jeton_decision = NULL WHERE id = d2;
+    UPDATE public.demandes SET statut = 'en_attente', etape = 1, jeton_decision = gen_random_uuid(), commentaire_decision = 'Validée par erreur',
+           decision_at = NULL, decision_par = NULL, derniere_action_par = u_rh, derniere_action_canal = 'appli' WHERE id = d2;
+    SELECT * INTO x FROM public.mails_sortants WHERE demande_id = d2 AND type = 'correction';
+    PERFORM pg_temp.verif('K1', 'correction : mail au manager avec le motif et l''ancien statut',
+        (x.destinataires ->> 0) || ' / ' || (x.donnees ->> 'commentaire') || ' / ' || (x.donnees ->> 'ancien_statut'), 'test.man@test.local / Validée par erreur / validee');
+    PERFORM pg_temp.verif('K2', 'correction : employé informé',
+        (SELECT destinataires ->> 0 FROM public.mails_sortants WHERE demande_id = d2 AND type = 'correction_info'), 'test.dev@test.local');
+    PERFORM pg_temp.verif('K3', 'correction : motif dans l''historique',
+        (SELECT commentaire FROM public.historique WHERE objet = 'demande' AND objet_id = d2 ORDER BY id DESC LIMIT 1), 'Correction : Validée par erreur');
+    -- Relance possible de nouveau après la correction (nouvelle échéance = nouveau palier)
+    UPDATE public.demandes SET relance_le = '2026-11-09', echeance_le = '2026-11-12' WHERE id = d2;
+    PERFORM automation.planifier_rappels();
+    UPDATE public.demandes SET relance_le = '2026-11-09', echeance_le = '2026-11-13' WHERE id = d2;
+    PERFORM automation.planifier_rappels();
+    PERFORM pg_temp.verif('K4', 'deux cycles (échéances différentes) = deux relances à l''étape 1',
+        (SELECT count(*) FROM public.mails_sortants WHERE demande_id = d2 AND type = 'relance'), 2::bigint);
+
+    -- =================================================================
+    -- P. Tâche mise en pause quand son responsable quitte le projet (R2)
+    -- =================================================================
+    INSERT INTO public.taches (titre, projet_id, responsable_id, cree_par, statut, deadline, nb_reports, created_at, updated_at)
+        VALUES ('Tâche du partant', p, u_dev, u_man, 'en_cours', '2026-11-20', 0, now(), now()) RETURNING id INTO t;
+    UPDATE public.taches SET statut = 'en_pause', pause_motif = 'Test Dev retiré(e) du projet', derniere_action_par = u_man WHERE id = t;
+    DELETE FROM public.projet_user WHERE projet_id = p AND user_id = u_dev;
+    SELECT * INTO x FROM public.taches WHERE id = t;
+    PERFORM pg_temp.verif('P1', 'pause : date et ancien responsable notés', (x.pause_le IS NOT NULL) || ' / ' || (x.pause_ancien_responsable_id = u_dev), 'true / true');
+    PERFORM pg_temp.verif('P2', 'pause : motif dans l''historique',
+        (SELECT commentaire FROM public.historique WHERE objet = 'tache' AND objet_id = t ORDER BY id DESC LIMIT 1), 'Test Dev retiré(e) du projet');
+    CREATE OR REPLACE FUNCTION automation.aujourdhui() RETURNS date LANGUAGE sql STABLE SET search_path = '' AS $f$ SELECT date '2026-11-30' $f$;
+    PERFORM automation.expirer();
+    PERFORM pg_temp.verif('P3', 'tâche en pause : jamais expirée (deadline dépassée)', (SELECT statut FROM public.taches WHERE id = t), 'en_pause');
+    PERFORM automation.planifier_rappels(); PERFORM automation.planifier_rappels();
+    PERFORM pg_temp.verif('P4', 'pause > 3 jours ouvrés : un seul rappel au chef de projet, pas de rappel de deadline',
+        (SELECT string_agg(type || '>' || (destinataires ->> 0), ',') FROM public.mails_sortants WHERE tache_id = t
+          AND type IN ('tache_pause_relance', 'tache_rappel', 'tache_expiration')), 'tache_pause_relance>test.man@test.local');
+    BEGIN UPDATE public.taches SET statut = 'a_faire' WHERE id = t; msg := 'acceptée';
+    EXCEPTION WHEN others THEN msg := SQLERRM; END;
+    PERFORM pg_temp.verif('P5', 'sortie de pause sans changer de responsable (non membre) : refusée', msg, 'Le responsable doit être membre du projet');
+    UPDATE public.taches SET statut = 'a_faire', responsable_id = u_man, deadline = '2026-12-04', derniere_action_par = u_man WHERE id = t;
+    SELECT * INTO x FROM public.taches WHERE id = t;
+    PERFORM pg_temp.verif('P6', 'réattribuée : à faire, champs de pause effacés', x.statut || ' / ' || (x.pause_le IS NULL) || ' / ' || (x.pause_ancien_responsable_id IS NULL), 'a_faire / true / true');
+    PERFORM pg_temp.verif('P7', 'réattribuée : un seul mail au nouveau responsable (deadline comprise)',
+        (SELECT string_agg(type || '>' || (destinataires ->> 0), ',' ORDER BY id) FROM public.mails_sortants WHERE tache_id = t AND type <> 'tache_pause_relance'
+          AND NOT (coalesce(donnees, '{}'::jsonb) ? 'assignation')),
+        'tache_reattribuee>test.man@test.local');
+    PERFORM pg_temp.verif('P8', 'historique : réattribution', (SELECT commentaire FROM public.historique WHERE objet = 'tache' AND objet_id = t ORDER BY id DESC LIMIT 1),
+        'Réattribuée à Manager Test');
+    CREATE OR REPLACE FUNCTION automation.aujourdhui() RETURNS date LANGUAGE sql STABLE SET search_path = '' AS $f$ SELECT date '2026-11-09' $f$;
 
     -- =================================================================
     -- S. Statistiques (si l'étape 4 est installée)

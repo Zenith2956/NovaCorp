@@ -104,16 +104,20 @@ class WorkflowDemande
     }
 
     /**
-     * Applique une action. $commentaire : motif de refus / complément demandé (obligatoire pour ces deux actions).
+     * Applique une action. $commentaire : motif de refus / complément demandé / motif de correction (obligatoire pour ces trois actions).
      * $canal : appli | mail.
      */
     public function executer(string $action, Demande $demande, User $user, ?string $commentaire = null, string $canal = 'appli'): string
     {
         abort_unless(in_array($action, $this->actionsPossibles($user, $demande), true), 403, 'Action non autorisée.');
 
-        if (in_array($action, ['refuser', 'demander_complement'], true) && blank($commentaire)) {
+        if (in_array($action, ['refuser', 'demander_complement', 'corriger'], true) && blank($commentaire)) {
             throw ValidationException::withMessages([
-                'commentaire' => $action === 'refuser' ? 'Le motif du refus est obligatoire.' : 'Précisez ce qu\'il faut compléter.',
+                'commentaire' => match ($action) {
+                    'refuser' => 'Le motif du refus est obligatoire.',
+                    'corriger' => 'Le motif de la correction est obligatoire (il est envoyé au manager et à l\'employé).',
+                    default => 'Précisez ce qu\'il faut compléter.',
+                },
             ]);
         }
 
@@ -177,11 +181,12 @@ class WorkflowDemande
                 case 'corriger':
                     $demande->update($trace + $this->nouveauxDelais($demande, $this->etapes($demande)->first()) + [
                         'statut' => 'en_attente', 'etape' => 1, 'jeton_decision' => (string) Str::uuid(),
-                        'decision_at' => null, 'decision_par' => null, 'commentaire_decision' => null,
+                        // Motif gardé jusqu'à la prochaine décision : affiché sur la fiche, envoyé par mail, copié dans l'historique
+                        'decision_at' => null, 'decision_par' => null, 'commentaire_decision' => $commentaire,
                         'traite_par' => null, 'traite_at' => null,
                     ]);
 
-                    return 'Demande remise en attente à l\'étape 1.';
+                    return 'Demande remise en attente à l\'étape 1 : le manager reçoit de nouveaux liens de décision, l\'employé est informé.';
             }
 
             return '';

@@ -42,18 +42,6 @@ class DemandeTest extends TestCase
         $this->assertDatabaseHas('connexion_logs', ['evenement' => 'connexion', 'user_id' => $user->id]);
     }
 
-    public function test_creation_de_compte(): void
-    {
-        $this->post('/inscription', [
-            'prenom' => 'Jeanne', 'nom' => 'Martin', 'email' => 'jeanne@novacorp.fr',
-            'telephone' => '0600000000', 'role_id' => $this->role('dev'),
-            'password' => 'motdepasse', 'password_confirmation' => 'motdepasse',
-        ])->assertRedirect('/tableau-de-bord');
-
-        $this->assertDatabaseHas('users', ['email' => 'jeanne@novacorp.fr']);
-        $this->assertSame(1, ConnexionLog::where('evenement', 'inscription')->count());
-    }
-
     public function test_envoi_demande_avec_pieces_jointes(): void
     {
         Mail::fake();

@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\ChiffreAffaire;
 use App\Models\Projet;
+use App\Models\Tache;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
@@ -132,13 +134,15 @@ class ProjetController extends Controller
     /** Un projet = un groupe : chef de projet, membres, tâches. */
     public function show(Request $request, Projet $projet)
     {
-        $projet->load(['chefProjet', 'membres.role', 'taches.responsable']);
+        $projet->load(['chefProjet', 'membres.role', 'taches.responsable', 'taches.pauseAncienResponsable']);
         $user = $request->user();
 
         return view('projets.show', [
             'projet' => $projet,
             'estMembre' => $projet->aPourMembre($user),
             'peutGerer' => $projet->gerablePar($user),
+            // R2 – membres qui ont des tâches non terminées (le bouton « Retirer » passe par l'avertissement)
+            'membresAvecTaches' => $projet->taches->whereIn('statut', Tache::STATUTS_ACTIFS)->pluck('responsable_id')->unique()->all(),
             'candidats' => $projet->gerablePar($user)
                 ? User::with('role')->where('actif', true)->whereNotIn('id', $projet->membres->pluck('id')->push($projet->chef_projet_id))
                     ->orderBy('nom')->get()
@@ -161,13 +165,52 @@ class ProjetController extends Controller
         return back()->with('success', $ids->count() > 1 ? "{$ids->count()} membres ajoutés au projet." : 'Membre ajouté au projet.');
     }
 
+    /** R2 – page d'avertissement : le membre a encore des tâches non terminées dans le projet. */
+    public function confirmerRetrait(Request $request, Projet $projet, User $user)
+    {
+        abort_unless($projet->gerablePar($request->user()), 403);
+        abort_unless($projet->membres()->whereKey($user->id)->exists(), 404);
+
+        return view('projets.retirer-membre', [
+            'projet' => $projet, 'membre' => $user, 'taches' => $this->tachesActives($projet, $user),
+        ]);
+    }
+
+    /**
+     * R2 – Retirer un membre. S'il a des tâches non terminées, il faut confirmer (page d'avertissement) :
+     * ses tâches passent « en pause », mises en avant pour le chef de projet qui les réattribue.
+     */
     public function retirerMembre(Request $request, Projet $projet, User $user)
     {
         abort_unless($projet->gerablePar($request->user()), 403);
-        abort_if($projet->taches()->where('responsable_id', $user->id)->whereIn('statut', ['a_faire', 'en_cours'])->exists(),
-            422, 'Ce membre a encore des tâches en cours dans le projet.');
-        $projet->membres()->detach($user->id);
+        $taches = $this->tachesActives($projet, $user);
+        if ($taches->isNotEmpty() && ! $request->boolean('confirmer')) {
+            return redirect()->route('projets.membres.confirmer', [$projet, $user]);
+        }
 
-        return back()->with('success', 'Membre retiré du projet.');
+        DB::transaction(function () use ($request, $projet, $user, $taches) {
+            // D'abord la pause (le responsable est encore membre), puis le retrait
+            foreach ($taches as $tache) {
+                $tache->update([
+                    'statut' => 'en_pause',
+                    'pause_le' => now(),
+                    'pause_motif' => "{$user->nom_complet} retiré(e) du projet",
+                    'pause_ancien_responsable_id' => $user->id,
+                    'derniere_action_par' => $request->user()->id,
+                    'derniere_action_canal' => 'appli',
+                ]);
+            }
+            $projet->membres()->detach($user->id);
+        });
+
+        return redirect()->route('projets.show', $projet)->with('success', $taches->isEmpty()
+            ? "{$user->nom_complet} est retiré(e) du projet."
+            : "{$user->nom_complet} est retiré(e) du projet : {$taches->count()} tâche(s) mise(s) en pause, à réattribuer ci-dessous.");
+    }
+
+    private function tachesActives(Projet $projet, User $user): Collection
+    {
+        return $projet->taches()->where('responsable_id', $user->id)->whereIn('statut', Tache::STATUTS_ACTIFS)
+            ->orderByRaw('deadline is null')->orderBy('deadline')->get();
     }
 }

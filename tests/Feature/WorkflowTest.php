@@ -189,8 +189,18 @@ class WorkflowTest extends TestCase
         // Correction d'une décision par la RH
         $this->agir($this->manager, $d, 'valider');
         $this->agir($this->manager, $d->fresh(), 'corriger')->assertForbidden();
-        $this->agir($this->rh, $d->fresh(), 'corriger');
+        $this->agir($this->rh, $d->fresh(), 'corriger')->assertSessionHasErrors('commentaire');   // R4 : motif obligatoire
+        $this->assertSame('validee', $d->fresh()->statut);
+        $this->agir($this->rh, $d->fresh(), 'corriger', 'Validée par erreur : solde insuffisant');
         $this->assertSame(['en_attente', 1], [$d->fresh()->statut, $d->fresh()->etape]);
+        $this->assertSame('Validée par erreur : solde insuffisant', $d->fresh()->commentaire_decision);
+        $this->assertNotNull($d->fresh()->jeton_decision);
+        $this->assertDatabaseHas('historique', ['objet' => 'demande', 'objet_id' => $d->id, 'ancien_statut' => 'validee',
+            'nouveau_statut' => 'en_attente', 'commentaire' => 'Correction : Validée par erreur : solde insuffisant']);
+        $this->actingAs($this->manager)->get("/demandes/{$d->id}")->assertSee('Décision précédente corrigée');
+        // La nouvelle décision efface le motif de correction
+        $this->agir($this->manager, $d->fresh(), 'valider');
+        $this->assertNull($d->fresh()->commentaire_decision);
     }
 
     public function test_lien_du_mail_pour_une_etape_de_service(): void

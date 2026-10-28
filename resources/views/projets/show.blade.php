@@ -18,6 +18,23 @@
     @if ($peutGerer && ! $projet->reunion_frequence) · <a href="{{ route('projets.edit', $projet) }}">choisir un jour de réunion</a>@endif
 </p>
 
+@php $enPause = $projet->taches->where('statut', 'en_pause'); @endphp
+@if ($enPause->isNotEmpty())
+<div class="alert pause">
+    <h2 style="margin-top:0">⏸ {{ $enPause->count() }} tâche{{ $enPause->count() > 1 ? 's' : '' }} en pause à réattribuer</h2>
+    <p style="margin:.2rem 0 .8rem">Leur responsable a été retiré du projet : personne n'y travaille.
+        {{ $peutGerer ? 'Confiez-les à un membre (il est prévenu par mail).' : 'Le chef de projet doit les réattribuer.' }}</p>
+    @foreach ($enPause as $tache)
+        <div style="padding:.6rem 0;border-top:1px solid #ffd8a8">
+            <a href="{{ route('taches.show', $tache) }}"><strong>{{ $tache->titre }}</strong></a>
+            <span class="muted"> — {{ $tache->pause_motif }}, en pause depuis le {{ $tache->pause_le?->timezone('Europe/Paris')->format('d/m/Y') }}
+                · deadline {{ $tache->deadline?->format('d/m/Y') ?? 'à fixer' }}</span>
+            @if ($peutGerer)<div style="margin-top:.4rem">@include('taches._reattribuer', ['tache' => $tache])</div>@endif
+        </div>
+    @endforeach
+</div>
+@endif
+
 <div class="card">
     <h2>Tâches ({{ $projet->taches->count() }})</h2>
     <table>
@@ -25,7 +42,8 @@
         @forelse ($projet->taches->sortBy(fn ($t) => $t->deadline?->timestamp ?? 0) as $tache)
             <tr>
                 <td><a href="{{ route('taches.show', $tache) }}">{{ $tache->titre }}</a></td>
-                <td>{{ $tache->responsable->nom_complet }}</td>
+                <td>{{ $tache->statut === 'en_pause' ? '—' : $tache->responsable->nom_complet }}
+                    @if ($tache->statut === 'en_pause')<span class="muted">(était {{ $tache->pauseAncienResponsable?->nom_complet }})</span>@endif</td>
                 <td>{{ $tache->deadline?->format('d/m/Y') ?? '—' }}</td>
                 <td>@include('taches._badge')</td>
             </tr>
@@ -45,7 +63,15 @@
                 <td>{{ $m->role?->libelle }}</td>
                 <td>{{ $m->email }}</td>
                 @if ($peutGerer)
-                    <td><form method="POST" action="{{ route('projets.membres.destroy', [$projet, $m]) }}">@csrf @method('DELETE')<button class="btn sec">Retirer</button></form></td>
+                    <td>
+                        @if (in_array($m->id, $membresAvecTaches))
+                            {{-- R2 : a des tâches non terminées → page d'avertissement avant le retrait --}}
+                            <a class="btn sec" href="{{ route('projets.membres.confirmer', [$projet, $m]) }}">Retirer…</a>
+                        @else
+                            <form method="POST" action="{{ route('projets.membres.destroy', [$projet, $m]) }}">@csrf @method('DELETE')
+                                <button class="btn sec" onclick="return confirm('Retirer {{ $m->nom_complet }} du projet ?')">Retirer</button></form>
+                        @endif
+                    </td>
                 @endif
             </tr>
         @endforeach

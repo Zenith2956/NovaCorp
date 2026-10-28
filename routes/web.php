@@ -1,7 +1,7 @@
 <?php
 
+use App\Http\Controllers\Auth\ActivationController;
 use App\Http\Controllers\Auth\LoginController;
-use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\ConnexionLogController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DecisionController;
@@ -27,12 +27,14 @@ Route::middleware('throttle:20,1')->group(function () {
     Route::post('/decision/{demande}/{jeton}/brouillon-ia', [DecisionController::class, 'brouillonIa'])->name('decision.brouillon-ia');
 });
 
-// --- Invités : connexion / inscription ---
+// --- Invités : connexion + activation du compte (plus d'inscription libre : l'admin crée les comptes, R1) ---
 Route::middleware('guest')->group(function () {
     Route::get('/connexion', [LoginController::class, 'create'])->name('login');
     Route::post('/connexion', [LoginController::class, 'store'])->middleware('throttle:5,1');
-    Route::get('/inscription', [RegisterController::class, 'create'])->name('register');
-    Route::post('/inscription', [RegisterController::class, 'store']);
+    Route::middleware('throttle:10,1')->group(function () {
+        Route::get('/activation/{jeton}', [ActivationController::class, 'create'])->name('activation');
+        Route::post('/activation/{jeton}', [ActivationController::class, 'store'])->name('activation.store');
+    });
 });
 
 // --- Utilisateurs connectés ---
@@ -50,6 +52,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/pieces-jointes/{pieceJointe}', [DemandeController::class, 'telechargerPieceJointe'])->name('pieces-jointes.download');
 
     Route::get('/employes', [EmployeController::class, 'index'])->name('employes.index');
+    Route::middleware('role:admin')->group(function () {
+        Route::get('/employes/nouveau', [EmployeController::class, 'create'])->name('employes.create');
+        Route::post('/employes', [EmployeController::class, 'store'])->name('employes.store');
+        Route::post('/employes/{user}/activation', [EmployeController::class, 'renvoyerActivation'])->name('employes.activation');
+    });
     Route::put('/mon-suppleant', SuppleantController::class)->name('suppleant.moi');
     Route::post('/assistant-rh', AssistantRhController::class)->middleware('throttle:20,1')->name('assistant-rh');
     Route::put('/employes/{user}/suppleant', SuppleantController::class)->name('suppleant.employe');
@@ -60,6 +67,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/projets/{projet}/modifier', [ProjetController::class, 'edit'])->name('projets.edit');
     Route::put('/projets/{projet}', [ProjetController::class, 'update'])->name('projets.update');
     Route::post('/projets/{projet}/membres', [ProjetController::class, 'ajouterMembre'])->name('projets.membres.store');
+    Route::get('/projets/{projet}/membres/{user}/retirer', [ProjetController::class, 'confirmerRetrait'])->name('projets.membres.confirmer');
     Route::delete('/projets/{projet}/membres/{user}', [ProjetController::class, 'retirerMembre'])->name('projets.membres.destroy');
 
     Route::get('/taches', [TacheController::class, 'index'])->name('taches.index');
@@ -68,6 +76,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/taches/{tache}', [TacheController::class, 'show'])->name('taches.show');
     Route::patch('/taches/{tache}/statut', [TacheController::class, 'updateStatut'])->name('taches.statut');
     Route::post('/taches/{tache}/validation', [TacheController::class, 'valider'])->name('taches.validation');
+    Route::post('/taches/{tache}/reattribuer', [TacheController::class, 'reattribuer'])->name('taches.reattribuer');
     Route::patch('/taches/{tache}/deadline', [TacheController::class, 'updateDeadline'])->name('taches.deadline');
 
     Route::get('/delais', [DelaiController::class, 'index'])

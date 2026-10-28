@@ -17,6 +17,6 @@
 
         <p><button class="btn" type="submit">Se connecter</button></p>
     </form>
-    <p class="muted">Pas encore de compte ? <a href="{{ route('register') }}">Créer un compte</a></p>
+    <p class="muted">Pas encore de compte ? Votre administrateur le crée et vous envoie un lien pour choisir votre mot de passe.</p>
 </div>
 @endsection

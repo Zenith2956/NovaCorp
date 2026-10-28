@@ -29,8 +29,17 @@ class Historique extends Model
         }
         $ancien = $nouveau ? null : $m->getOriginal('statut');
         $commentaire = $objet === 'demande'
-            ? (in_array($m->statut, ['refusee', 'a_completer'], true) ? $m->commentaire_decision : null)
-            : ($ancien === 'a_valider' && $m->statut === 'en_cours' ? $m->commentaire_validation : null);
+            ? match (true) {
+                in_array($m->statut, ['refusee', 'a_completer'], true) => $m->commentaire_decision,
+                in_array($ancien, ['validee', 'refusee'], true) && $m->statut === 'en_attente' => 'Correction : '.$m->commentaire_decision,
+                default => null,
+            }
+            : match (true) {
+                $ancien === 'a_valider' && $m->statut === 'en_cours' => $m->commentaire_validation,
+                $m->statut === 'en_pause' => $m->pause_motif,
+                $ancien === 'en_pause' => 'Réattribuée à '.User::find($m->responsable_id)?->nom_complet,
+                default => null,
+            };
 
         static::create([
             'objet' => $objet, 'objet_id' => $m->id, 'ancien_statut' => $ancien, 'nouveau_statut' => $m->statut,

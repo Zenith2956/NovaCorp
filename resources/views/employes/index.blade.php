@@ -2,7 +2,10 @@
 @section('title', 'Employés')
 
 @section('content')
-<h1>Employés ({{ $employes->total() }})</h1>
+<div class="inline" style="justify-content:space-between">
+    <h1>Employés ({{ $employes->total() }})</h1>
+    @if ($estAdmin)<a class="btn" href="{{ route('employes.create') }}">+ Ajouter un employé</a>@endif
+</div>
 <div class="card">
     <form class="inline" method="GET">
         <input name="q" value="{{ request('q') }}" placeholder="Nom, prénom ou e-mail" style="min-width:260px">
@@ -19,7 +22,15 @@
         <tr><th>Nom</th><th>Prénom</th><th>Rôle</th><th>E-mail</th><th>Téléphone</th><th>Manager</th><th>Suppléant (congés)</th></tr>
         @foreach ($employes as $e)
             <tr>
-                <td>{{ $e->nom }}</td>
+                <td>{{ $e->nom }}
+                    @if ($e->en_attente_activation)
+                        <br><span class="badge t-a_valider" title="Mot de passe pas encore choisi">Non activé{{ $e->jeton_activation_expire_at?->isPast() ? ' (lien expiré)' : '' }}</span>
+                        @if ($estAdmin)
+                            <form method="POST" action="{{ route('employes.activation', $e) }}" style="display:inline">@csrf
+                                <button class="btn sec" style="padding:.1rem .5rem;font-size:.8rem">Renvoyer le lien</button></form>
+                        @endif
+                    @endif
+                </td>
                 <td>{{ $e->prenom }}</td>
                 <td><span class="badge">{{ $e->role?->libelle }}</span></td>
                 <td><a href="mailto:{{ $e->email }}">{{ $e->email }}</a></td>

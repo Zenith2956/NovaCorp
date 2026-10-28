@@ -1,0 +1,103 @@
+{
+  "name": "novacorp-brouillon",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novacorp-brouillon",
+        "authentication": "headerAuth",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "bd00d539-c7d6-408f-8d37-5f133d62cc00",
+      "name": "Webhook",
+      "webhookId": "25ce6584-4012-41ee-90f1-57a8c6ce7e66",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3E1mNMYmYqgtmxer",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Tu rédiges, au nom de {{ $json.body.valideur }}, le commentaire d'une {{ $json.body.intention_libelle }} pour une demande interne de {{ $json.body.demandeur_prenom }}.\nÉcris 2 à 4 phrases en français, polies et précises, en vouvoyant, sans formule d'appel ni signature.\nRefus : explique clairement le motif. Demande de complément : liste précisément ce qui manque.\nAppuie-toi d'abord sur les notes du valideur, puis sur les points d'attention. N'invente aucun fait.\nNotes du valideur : {{ $json.body.notes_valideur }}\nPoints d'attention : {{ JSON.stringify($json.body.points_attention) }}\nDemande : type {{ $json.body.type }}, objet « {{ $json.body.objet }} », montant {{ $json.body.montant }} €, du {{ $json.body.date_debut }} au {{ $json.body.date_fin }}, date souhaitée {{ $json.body.date_souhaitee }}.\nMessage : {{ $json.body.message }}\nPièces jointes : {{ JSON.stringify($json.body.pieces_jointes) }}\nRéponds uniquement avec le texte du commentaire.\nPars d'abord des notes du manager (champ notes) : elles sont prioritaires.\nN'utilise un point d'attention que s'il justifie directement l'intention (refuser ou demander un complément). Ignore ceux qui concernent l'urgence ou un montant pour un congé.\nNe reproche jamais à l'employé une information qu'il n'avait pas à fournir.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        224,
+        0
+      ],
+      "id": "411a9e68-5537-439a-a787-b4a8d7943854",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "options": {
+          "maxTokens": 300
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        160,
+        208
+      ],
+      "id": "585c765c-8f6c-4720-a00d-591e53ce1303",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "MKh67PQEhzGeTP6a",
+          "name": "OpenRouter account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "b4e68831-a936-4c52-8753-15559e95a897",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "de1aa0cb5379eab2209b9c733e6b62bd7b492d3051e23f3f70704820ae342ad1"
+  },
+  "nodeGroups": [],
+  "id": "x0buZvoJqiLJVOpI",
+  "tags": []
+}

@@ -1,0 +1,150 @@
+{
+  "name": "NovaCorp-Résumé IA",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "novacorp-resume",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "42b19f51-0303-4b68-b1d4-a1de1e8dc688",
+      "name": "Webhook",
+      "webhookId": "cfa7f259-00a2-46d4-bd03-e4bcf412a6b2",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3E1mNMYmYqgtmxer",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Tu aides un manager à traiter une demande interne. Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, au format :\n{\"resume\": \"...\", \"points_attention\": [\"...\"], \"urgence_suggeree\": false, \"type_suggere\": null}\n- resume : 1 ou 2 phrases factuelles en français, sans formule de politesse.\n- points_attention : 0 à 3 points courts sur ce qui manque ou pose question (ex. note de frais sans justificatif, montant absent, dates incohérentes, motif flou). Liste vide si tout est clair.\n- urgence_suggeree : true seulement si le message montre une vraie urgence (échéance très proche, travail bloqué).\n- type_suggere : un code parmi conge, materiel, formation, note_de_frais, autre si le type choisi semble faux, sinon null.\n\nDemande :\nType choisi : {{ $json.body.type }} ({{ $json.body.type_code }})\nObjet : {{ $json.body.objet }}\nMessage : {{ $json.body.message }}\nMontant : {{ $json.body.montant }} €\nDates : du {{ $json.body.date_debut }} au {{ $json.body.date_fin }} ({{ $json.body.nb_jours_ouvres }} j ouvrés)\nDate souhaitée : {{ $json.body.date_souhaitee }}\nMarquée urgente : {{ $json.body.urgente }}\nPièces jointes : {{ JSON.stringify($json.body.pieces_jointes) }}\nDate du jour : {{ $now.toFormat('yyyy-MM-dd') }}\n\nRègles pour points_attention :\n- Ne signale jamais l'absence de montant pour un congé ou une formation sans coût.\n- Ne signale jamais l'urgence : elle est calculée automatiquement par l'application à partir de la date souhaitée.\n- Maximum 3 points, chacun lié à une information réellement utile pour décider (justificatif, dates, montant d'une dépense).",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        224,
+        0
+      ],
+      "id": "44bc2dd5-6281-4ccc-a89f-fd098ae5072f",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "options": {
+          "maxTokens": 300,
+          "temperature": 0.3
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        160,
+        208
+      ],
+      "id": "7b45263c-4f26-4eb7-97b3-ab54feefc149",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "MKh67PQEhzGeTP6a",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dcqnefjzlkwphhytwczr.supabase.co/functions/v1/enregistrer-resume",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "demande_id",
+              "value": "={{ $('Webhook').item.json.body.demande_id }}"
+            },
+            {
+              "name": "resume",
+              "value": "={{ $json.text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        592,
+        0
+      ],
+      "id": "37d47500-0ad2-4921-b7ba-7c1cbfef89cd",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3E1mNMYmYqgtmxer",
+          "name": "Header Auth account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5797f21b-e293-4fdb-82e8-0b391e456579",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "de1aa0cb5379eab2209b9c733e6b62bd7b492d3051e23f3f70704820ae342ad1"
+  },
+  "nodeGroups": [],
+  "id": "TIxA22142t3iPyJp",
+  "tags": []
+}
